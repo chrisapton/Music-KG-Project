@@ -3,6 +3,7 @@ from scrapy.loader import ItemLoader
 from urllib.parse import urljoin
 import re
 import logging
+import time
 from datetime import datetime
 from whosampled.items import SampleItem, SampleRelationship
 
@@ -29,8 +30,11 @@ class SampleSpider(scrapy.Spider):
         self.sample_relationships = set()
 
         # Separate depth limits for forward and reverse crawling
-        self.forward_depth_limit = kwargs.get('forward_depth_limit', 2)
-        self.reverse_depth_limit = kwargs.get('reverse_depth_limit', 2)
+        self.forward_depth_limit = kwargs.get('forward_depth_limit', 5)  # Default to 5
+        self.reverse_depth_limit = kwargs.get('reverse_depth_limit', 5)  # Default to 5
+
+        # Pegnination limit
+        self.pagination_count = 1
 
         # Track statistics
         self.stats = {
@@ -57,6 +61,7 @@ class SampleSpider(scrapy.Spider):
                 full_url = urljoin(response.url, link)
                 if full_url not in self.visited_urls:
                     self.visited_urls.add(full_url)
+                    time.sleep(3)  # explicit delay to avoid being blocked
                     yield scrapy.Request(
                         url=full_url,
                         callback=self.parse_track,
@@ -64,12 +69,15 @@ class SampleSpider(scrapy.Spider):
                     )
 
             # Follow pagination if it exists
-            # next_page = response.css('a.next::attr(href)').get()
-            # if next_page:
-            #     next_url = urljoin(response.url, next_page)
-            #     if next_url not in self.visited_urls:
-            #         self.visited_urls.add(next_url)
-            #         yield scrapy.Request(url=next_url, callback=self.parse)
+            next_page = response.css('span.next a::attr(href)').get()
+            if next_page and self.pagination_count <= 10:
+                self.pagination_count += 1
+                self.logger.info(f"Following pagination link: {next_page}")
+                next_url = urljoin(response.url, next_page)
+                if next_url not in self.visited_urls:
+                    self.visited_urls.add(next_url)
+                    time.sleep(3)  # explicit delay to avoid being blocked
+                    yield scrapy.Request(url=next_url, callback=self.parse)
 
         except Exception as e:
             self.logger.error(f"Error parsing page {response.url}: {str(e)}")
@@ -78,6 +86,7 @@ class SampleSpider(scrapy.Spider):
         """
         Parse individual track pages to extract detailed information
         """
+        time.sleep(2)  # explicit delay to avoid being blocked
         try:
             # Get metadata about this request
             current_depth = response.meta.get('depth', 0)
@@ -176,6 +185,7 @@ class SampleSpider(scrapy.Spider):
                 samples_url = urljoin(response.url, see_all_samples)
                 if samples_url not in self.visited_urls:
                     self.visited_urls.add(samples_url)
+                    time.sleep(1) # explicit delay to avoid being blocked
                     yield scrapy.Request(
                         url=samples_url,
                         callback=self.parse_samples_page,
@@ -195,6 +205,7 @@ class SampleSpider(scrapy.Spider):
 
                     # Extract sampling relationships from the entries
                     for entry in contains_section:
+                        time.sleep(1)  # explicit delay to avoid being blocked
                         # Get the sample link
                         sample_link = entry.css('a::attr(href)').get()
 
@@ -242,6 +253,7 @@ class SampleSpider(scrapy.Spider):
                     full_url = urljoin(response.url, sample_link)
                     if full_url not in self.visited_urls:
                         self.visited_urls.add(full_url)
+                        time.sleep(1)  # explicit delay to avoid being blocked
                         yield scrapy.Request(
                             url=full_url,
                             callback=self.parse_sample_page,
@@ -330,7 +342,7 @@ class SampleSpider(scrapy.Spider):
         try:
             # First check for "See all" button for samplers
             see_all_sampled = response.xpath(
-                './/header[.//h3[contains(text(), "Contains")]]/following-sibling::div//a[contains(@class, "btn") and contains(text(), "see all")]/@href'
+                './/header[.//h3[contains(text(), "Sampled")]]/following-sibling::div//a[contains(@class, "btn") and contains(text(), "see all")]/@href'
             ).get()
 
             if see_all_sampled:
@@ -341,6 +353,7 @@ class SampleSpider(scrapy.Spider):
                 sampled_url = urljoin(response.url, see_all_sampled)
                 if sampled_url not in self.visited_urls:
                     self.visited_urls.add(sampled_url)
+                    time.sleep(1)  # explicit delay to avoid being blocked
                     yield scrapy.Request(
                         url=sampled_url,
                         callback=self.parse_sampled_page,
@@ -368,6 +381,7 @@ class SampleSpider(scrapy.Spider):
                             full_url = urljoin(response.url, sample_link)
                             if full_url not in self.visited_urls:
                                 self.visited_urls.add(full_url)
+                                time.sleep(1) # explicit delay to avoid being blocked
                                 yield scrapy.Request(
                                     url=full_url,
                                     callback=self.parse_sample_page_reverse,
@@ -406,6 +420,7 @@ class SampleSpider(scrapy.Spider):
                     full_url = urljoin(response.url, sample_link)
                     if full_url not in self.visited_urls:
                         self.visited_urls.add(full_url)
+                        time.sleep(1)  # explicit delay to avoid being blocked
                         yield scrapy.Request(
                             url=full_url,
                             callback=self.parse_sample_page_reverse,
