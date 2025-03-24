@@ -1,11 +1,5 @@
-# Define your item pipelines here
-#
-# Don't forget to add your pipeline to the ITEM_PIPELINES setting
-# See: https://docs.scrapy.org/en/latest/topics/item-pipeline.html
-
-
-# useful for handling different item types with a single interface
 import json
+import re
 import logging
 from itemadapter import ItemAdapter
 from datetime import datetime
@@ -15,45 +9,49 @@ from whosampled.items import SampleItem, SampleRelationship
 
 class WhoSampledPipeline:
     def process_item(self, item, spider):
-        """
-        Basic pipeline to clean and validate items
-        """
         adapter = ItemAdapter(item)
 
         # Add timestamp if not present
         if 'timestamp' not in adapter or not adapter['timestamp']:
             adapter['timestamp'] = datetime.now().isoformat()
 
+        # Clean timestamp fields
+        timestamp_fields = ['timestamp_in_source', 'timestamp_in_target']
+
+        for field in timestamp_fields:
+            if field in adapter:
+                raw_value = adapter.get(field, [])
+
+                if isinstance(raw_value, list):
+                    # Filter out non-timestamp elements
+                    cleaned = [
+                        ts for ts in raw_value
+                        if re.match(r'^\d+:\d+$', ts)
+                    ]
+                    adapter[field] = cleaned
+                elif isinstance(raw_value, str):
+                    adapter[field] = [raw_value] if re.match(r'^\d+:\d+$', raw_value) else []
+
         return item
 
 
 class JsonWriterPipeline:
     """
-    Pipeline to save items to separate JSON files based on their type
+    Pipeline to save items to separate JSON Lines files based on their type
     """
 
     def open_spider(self, spider):
-        self.tracks_file = open('../../data/raw/whosampled_tracks_test.json', 'w')
-        self.relationships_file = open('../../data/raw/whosampled_relationships.json', 'w')
-
-        # Initialize empty lists
-        self.tracks_file.write('[\n')
-        self.relationships_file.write('[\n')
+        self.tracks_file = open('../../data/raw/whosampled_tracks_test.jsonl', 'w', encoding='utf-8')
+        self.relationships_file = open('../../data/raw/whosampled_relationships.jsonl', 'w', encoding='utf-8')
 
         # Track what we've already written to each file
         self.track_ids = set()
         self.relationship_ids = set()
 
-        # Comma tracking for JSON arrays
         self.tracks_count = 0
         self.relationships_count = 0
 
     def close_spider(self, spider):
-        # Close the JSON arrays
-        self.tracks_file.write('\n]')
-        self.relationships_file.write('\n]')
-
-        # Close the files
         self.tracks_file.close()
         self.relationships_file.close()
 
@@ -88,10 +86,9 @@ class JsonWriterPipeline:
                 else:
                     processed_item[key] = value
 
-            # Write to file with proper JSON formatting
-            if self.tracks_count > 0:
-                self.tracks_file.write(',\n')
-            self.tracks_file.write(json.dumps(processed_item, ensure_ascii=False))
+            # Write to file as a single JSON line
+            line = json.dumps(processed_item, ensure_ascii=False) + "\n"
+            self.tracks_file.write(line)
             self.tracks_count += 1
 
         else:
@@ -115,10 +112,17 @@ class JsonWriterPipeline:
         # Add to our set of processed relationships
         self.relationship_ids.add(relationship_id)
 
-        # Write to file with proper JSON formatting
-        if self.relationships_count > 0:
-            self.relationships_file.write(',\n')
-        self.relationships_file.write(json.dumps(ItemAdapter(item).asdict(), ensure_ascii=False))
+        # Convert single-value lists to strings
+        processed_item = {}
+        for key, value in adapter.asdict().items():
+            if isinstance(value, list) and len(value) == 1:
+                processed_item[key] = value[0]
+            else:
+                processed_item[key] = value
+
+        # Write to file as a single JSON line
+        line = json.dumps(processed_item, ensure_ascii=False) + "\n"
+        self.relationships_file.write(line)
         self.relationships_count += 1
 
         return item
