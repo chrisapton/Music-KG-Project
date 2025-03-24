@@ -30,8 +30,11 @@ class SampleSpider(scrapy.Spider):
         self.sample_relationships = set()
 
         # Separate depth limits for forward and reverse crawling
-        self.forward_depth_limit = kwargs.get('forward_depth_limit', 2)
-        self.reverse_depth_limit = kwargs.get('reverse_depth_limit', 2)
+        self.forward_depth_limit = kwargs.get('forward_depth_limit', 5)  # Default to 5
+        self.reverse_depth_limit = kwargs.get('reverse_depth_limit', 5)  # Default to 5
+
+        # Pegnination limit
+        self.pagination_count = 1
 
         # Track statistics
         self.stats = {
@@ -66,12 +69,15 @@ class SampleSpider(scrapy.Spider):
                     )
 
             # Follow pagination if it exists
-            # next_page = response.css('a.next::attr(href)').get()
-            # if next_page:
-            #     next_url = urljoin(response.url, next_page)
-            #     if next_url not in self.visited_urls:
-            #         self.visited_urls.add(next_url)
-            #         yield scrapy.Request(url=next_url, callback=self.parse)
+            next_page = response.css('span.next a::attr(href)').get()
+            if next_page and self.pagination_count <= 10:
+                self.pagination_count += 1
+                self.logger.info(f"Following pagination link: {next_page}")
+                next_url = urljoin(response.url, next_page)
+                if next_url not in self.visited_urls:
+                    self.visited_urls.add(next_url)
+                    time.sleep(3)  # explicit delay to avoid being blocked
+                    yield scrapy.Request(url=next_url, callback=self.parse)
 
         except Exception as e:
             self.logger.error(f"Error parsing page {response.url}: {str(e)}")
