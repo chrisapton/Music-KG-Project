@@ -122,7 +122,7 @@ AUTOTHROTTLE_DEBUG = False
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
 
-DEPTH_LIMIT = 5
+DEPTH_LIMIT = 10
 
 LOG_LEVEL = "INFO"
 
