@@ -49,7 +49,6 @@ class SampleSpider(scrapy.Spider):
         try:
             # Extract track links from the page
             track_links = response.css('h3.trackName a[itemprop="url"]::attr(href)').getall()
-            print(track_links)
 
             self.logger.info(f"Found {len(track_links)} tracks on page {response.url}")
 
@@ -123,8 +122,8 @@ class SampleSpider(scrapy.Spider):
                 loader.add_value('producer', [self.clean_text(p) for p in producers])
 
             # Extract youtube link
-            youtube_link = response.css('div.track-embed iframe::attr(src)').get()
-            if youtube_link:
+            youtube_link = response.css('div.media-container iframe::attr(src)').get()
+            if youtube_link is not None:
                 loader.add_value('youtube_link', youtube_link)
 
             # Get the track ID from the URL
@@ -165,8 +164,8 @@ class SampleSpider(scrapy.Spider):
         """
         try:
             # First check for "See all" button for samples
-            see_all_samples = response.css('div.list-item').xpath(
-                './/h3[contains(text(), "Contains")]/following-sibling::div//a[contains(@class, "btn") and contains(text(), "see all")]/@href'
+            see_all_samples = response.xpath(
+                './/header[.//h3[contains(text(), "Contains")]]/following-sibling::div//a[contains(@class, "btn") and contains(text(), "see all")]/@href'
             ).get()
 
             if see_all_samples:
@@ -187,8 +186,9 @@ class SampleSpider(scrapy.Spider):
                     )
             else:
                 # Process inline samples from the track page
-                contains_section = response.css('div.list-item').xpath(
-                    './/h3[contains(text(), "Contains")]/following-sibling::div//div[contains(@class, "listEntry")]')
+                contains_section = response.xpath(
+                    './/header[.//h3[contains(text(), "Contains")]]/following-sibling::table[1]//td[@class="tdata__td1"]'
+                )
 
                 if contains_section:
                     self.logger.info(f"Processing {len(contains_section)} inline samples in track {track_id}")
@@ -196,7 +196,7 @@ class SampleSpider(scrapy.Spider):
                     # Extract sampling relationships from the entries
                     for entry in contains_section:
                         # Get the sample link
-                        sample_link = entry.css('a.trackName::attr(href)').get()
+                        sample_link = entry.css('a::attr(href)').get()
 
                         if sample_link:
                             # Follow the link to the sample page to get detailed information
@@ -229,13 +229,13 @@ class SampleSpider(scrapy.Spider):
             self.logger.info(f"Parsing samples page for track {source_track_id}: {response.url}")
 
             # Extract all samples from the page
-            sample_entries = response.css('div.sampleEntry, div.listEntry')
+            sample_entries = response.css('td.tdata__td1')
 
             self.logger.info(f"Found {len(sample_entries)} samples on dedicated samples page for {source_track_id}")
 
             for entry in sample_entries:
                 # Get the sample link
-                sample_link = entry.css('a.trackName::attr(href)').get()
+                sample_link = entry.css('a::attr(href)').get()
 
                 if sample_link:
                     # Follow the link to the sample page to get detailed information
@@ -329,8 +329,8 @@ class SampleSpider(scrapy.Spider):
         """
         try:
             # First check for "See all" button for samplers
-            see_all_sampled = response.css('div.list-item').xpath(
-                './/h3[contains(text(), "Was sampled in")]/following-sibling::div//a[contains(@class, "btn") and contains(text(), "see all")]/@href'
+            see_all_sampled = response.xpath(
+                './/header[.//h3[contains(text(), "Contains")]]/following-sibling::div//a[contains(@class, "btn") and contains(text(), "see all")]/@href'
             ).get()
 
             if see_all_sampled:
@@ -351,8 +351,9 @@ class SampleSpider(scrapy.Spider):
                     )
             else:
                 # Process inline samplers from the track page
-                sampled_in_section = response.css('div.list-item').xpath(
-                    './/h3[contains(text(), "Sampled in")]/following-sibling::div//div[contains(@class, "listEntry")]')
+                sampled_in_section = response.xpath(
+                    './/header[.//h3[contains(text(), "Sampled")]]/following-sibling::table[1]//td[@class="tdata__td1"]'
+                )
 
                 if sampled_in_section:
                     self.logger.info(f"Processing {len(sampled_in_section)} inline samplers in track {track_id}")
@@ -360,7 +361,7 @@ class SampleSpider(scrapy.Spider):
                     # Process the samplers directly from this page
                     for entry in sampled_in_section:
                         # Get the sample link
-                        sample_link = entry.css('a.trackName::attr(href)').get()
+                        sample_link = entry.css('a::attr(href)').get()
 
                         if sample_link:
                             # Follow the link to the sample page to get detailed information
@@ -392,13 +393,13 @@ class SampleSpider(scrapy.Spider):
             self.logger.info(f"Parsing sampled page for track {source_track_id}: {response.url}")
 
             # Extract all samplers from the page
-            sampler_entries = response.css('div.sampleEntry, div.listEntry')
+            sampler_entries = response.css('td.tdata__td1')
 
             self.logger.info(f"Found {len(sampler_entries)} samplers on dedicated sampled page for {source_track_id}")
 
             for entry in sampler_entries:
                 # Get the sample link
-                sample_link = entry.css('a.trackName::attr(href)').get()
+                sample_link = entry.css('a::attr(href)').get()
 
                 if sample_link:
                     # Follow the link to the sample page to get detailed information
