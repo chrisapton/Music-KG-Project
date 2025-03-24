@@ -100,7 +100,7 @@ class RandomDelayMiddleware:
 
     @classmethod
     def from_crawler(cls, crawler):
-        delay = crawler.settings.get('RANDOM_DELAY', [3, 7])
+        delay = crawler.settings.get('RANDOM_DELAY', [5, 10])
         return cls(delay)
 
     def process_request(self, request, spider):
@@ -124,7 +124,7 @@ class CloudflareMiddleware:
         if browser_type:
             self.scraper = cloudscraper.create_scraper(browser={
                 'browser': browser_type,
-                'platform': 'windows',
+                'platform': 'linux',
                 'mobile': False
             })
         else:
