@@ -77,11 +77,11 @@ DOWNLOADER_MIDDLEWARES = {
 }
 
 PROXY_LIST = [
-    'http://207.248.3.81:999',
-    'http://1.202.174.38:80',
-    'http://45.179.71.90:3180',
-    'http://27.147.249.17:38947',
-    'http://102.222.231.25:2333'
+    'http://93.157.12.234:8080',
+    'http://222.127.248.78:8082',
+    'http://103.41.88.182:83',
+    'http://185.196.68.106:3128',
+    'http://36.94.232.177:3113'
 ]
 
 # Enable or disable extensions
@@ -122,7 +122,7 @@ AUTOTHROTTLE_DEBUG = False
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
 
-DEPTH_LIMIT = 10
+# DEPTH_LIMIT = 10
 
 LOG_LEVEL = "INFO"
 
