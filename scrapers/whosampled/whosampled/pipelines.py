@@ -41,8 +41,8 @@ class JsonWriterPipeline:
     """
 
     def open_spider(self, spider):
-        self.tracks_file = open('../../data/raw/whosampled_tracks_2024_1_10.jsonl', 'w', encoding='utf-8')
-        self.relationships_file = open('../../data/raw/whosampled_relationships_2024_1_10.jsonl', 'w', encoding='utf-8')
+        self.tracks_file = open('../../data/raw/whosampled_tracks_2024_1.jsonl', 'w', encoding='utf-8')
+        self.relationships_file = open('../../data/raw/whosampled_relationships_2024_1.jsonl', 'w', encoding='utf-8')
 
         # Track what we've already written to each file
         self.track_ids = set()

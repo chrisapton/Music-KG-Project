@@ -20,7 +20,7 @@ class SampleSpider(scrapy.Spider):
     """
     name = "samples"
     allowed_domains = ["whosampled.com"]
-    start_urls = ["https://www.whosampled.com/browse/year/2024/"]
+    start_urls = ["https://www.whosampled.com/browse/year/2024"]
 
     def __init__(self, *args, **kwargs):
         super(SampleSpider, self).__init__(*args, **kwargs)
@@ -30,11 +30,11 @@ class SampleSpider(scrapy.Spider):
         self.sample_relationships = set()
 
         # Separate depth limits for forward and reverse crawling
-        self.forward_depth_limit = kwargs.get('forward_depth_limit', 5)  # Default to 5
-        self.reverse_depth_limit = kwargs.get('reverse_depth_limit', 5)  # Default to 5
+        self.forward_depth_limit = kwargs.get('forward_depth_limit', 10)  # Default to 5
+        self.reverse_depth_limit = kwargs.get('reverse_depth_limit', 10)  # Default to 5
 
-        # Pegnination limit
-        self.pagination_count = 1
+        # Pagination limit
+        # self.pagination_count = 1
 
         # Track statistics
         self.stats = {
@@ -43,7 +43,8 @@ class SampleSpider(scrapy.Spider):
             'forward_relationships': 0,
             'reverse_relationships': 0,
             'see_all_samples_found': 0,
-            'see_all_sampled_found': 0
+            'see_all_sampled_found': 0,
+            'max_depth_reached': 0
         }
 
     def parse(self, response):
@@ -56,6 +57,10 @@ class SampleSpider(scrapy.Spider):
 
             self.logger.info(f"Found {len(track_links)} tracks on page {response.url}")
 
+            # Get current pagination page number
+            current_page = response.meta.get('pagination_page', 1)
+            self.logger.info(f"Processing pagination page: {current_page}")
+
             # Follow each track link
             for link in track_links:
                 full_url = urljoin(response.url, link)
@@ -65,19 +70,27 @@ class SampleSpider(scrapy.Spider):
                     yield scrapy.Request(
                         url=full_url,
                         callback=self.parse_track,
-                        meta={'track_type': 'initial', 'depth': 0}
+                        meta={
+                            'track_type': 'initial',
+                            'depth': 0,  # Always start with depth 0 for tracks from pagination
+                            'from_page': current_page
+                        }
                     )
 
             # Follow pagination if it exists
-            next_page = response.css('span.next a::attr(href)').get()
-            if next_page and self.pagination_count <= 10:
-                self.pagination_count += 1
-                self.logger.info(f"Following pagination link: {next_page}")
-                next_url = urljoin(response.url, next_page)
-                if next_url not in self.visited_urls:
-                    self.visited_urls.add(next_url)
-                    time.sleep(3)  # explicit delay to avoid being blocked
-                    yield scrapy.Request(url=next_url, callback=self.parse)
+            # next_page = response.css('span.next a::attr(href)').get()
+            # if next_page and self.pagination_count < 5:  # Changed <= to < to match count starting at 1
+            #     self.pagination_count += 1
+            #     self.logger.info(f"Following pagination link: {next_page}")
+            #     next_url = urljoin(response.url, next_page)
+            #     if next_url not in self.visited_urls:
+            #         self.visited_urls.add(next_url)
+            #         time.sleep(3)  # explicit delay to avoid being blocked
+            #         yield scrapy.Request(
+            #             url=next_url,
+            #             callback=self.parse,
+            #             meta={'pagination_page': self.pagination_count}
+            #         )
 
         except Exception as e:
             self.logger.error(f"Error parsing page {response.url}: {str(e)}")
@@ -88,11 +101,24 @@ class SampleSpider(scrapy.Spider):
         """
         time.sleep(2)  # explicit delay to avoid being blocked
         try:
+            # debug
+            # self.logger.info(f"Parsing track: {response.url}")
+            # self.logger.info(f"Current depth: {response.meta.get('depth', 'Not set')}")
+            # self.logger.info(f"Track type: {response.meta.get('track_type', 'Not set')}")
+            # self.logger.info(f"From page: {response.meta.get('from_page', 'Not set')}")
             # Get metadata about this request
             current_depth = response.meta.get('depth', 0)
             track_type = response.meta.get('track_type', 'unknown')
+            from_page = response.meta.get('from_page', 0)
 
-            self.logger.info(f"Parsing track: {response.url} (Type: {track_type}, Depth: {current_depth})")
+            # Update max depth statistic
+            if current_depth > self.stats['max_depth_reached']:
+                self.stats['max_depth_reached'] = current_depth
+
+            self.logger.info(
+                f"Parsing track: {response.url} (Type: {track_type}, "
+                f"Depth: {current_depth}, From page: {from_page})"
+            )
 
             # Create a new item loader
             loader = ItemLoader(item=SampleItem(), response=response)
@@ -152,16 +178,20 @@ class SampleSpider(scrapy.Spider):
             # Yield the track item
             yield track_item
 
-            # BIDIRECTIONAL APPROACH WITH "SEE ALL" DETECTION:
-            # Process both directions for every track
+            # BIDIRECTIONAL APPROACH WITH PROPER DEPTH CHECKING:
+            # Process both directions for every track, but only if within depth limits
 
             # Process "Contains samples of" section (forward direction)
             if current_depth < self.forward_depth_limit:
                 yield from self.process_samples_forward(response, track_id, current_depth)
+            else:
+                self.logger.debug(f"Skipping forward samples for {track_id}: depth limit reached ({current_depth})")
 
             # Process "Was sampled in" section (reverse direction)
             if current_depth < self.reverse_depth_limit:
                 yield from self.process_samplers_reverse(response, track_id, current_depth)
+            else:
+                self.logger.debug(f"Skipping reverse samples for {track_id}: depth limit reached ({current_depth})")
 
         except Exception as e:
             self.logger.error(f"Error parsing track {response.url}: {str(e)}")
@@ -185,13 +215,13 @@ class SampleSpider(scrapy.Spider):
                 samples_url = urljoin(response.url, see_all_samples)
                 if samples_url not in self.visited_urls:
                     self.visited_urls.add(samples_url)
-                    time.sleep(1) # explicit delay to avoid being blocked
+                    time.sleep(1)  # explicit delay to avoid being blocked
                     yield scrapy.Request(
                         url=samples_url,
                         callback=self.parse_samples_page,
                         meta={
                             'source_track_id': track_id,
-                            'depth': current_depth + 1
+                            'depth': current_depth
                         }
                     )
             else:
@@ -219,7 +249,7 @@ class SampleSpider(scrapy.Spider):
                                     callback=self.parse_sample_page,
                                     meta={
                                         'source_track_id': track_id,
-                                        'depth': current_depth + 1
+                                        'depth': current_depth
                                     }
                                 )
 
@@ -237,7 +267,15 @@ class SampleSpider(scrapy.Spider):
             source_track_id = response.meta.get('source_track_id')
             current_depth = response.meta.get('depth', 0)
 
-            self.logger.info(f"Parsing samples page for track {source_track_id}: {response.url}")
+            self.logger.info(
+                f"Parsing samples page for track {source_track_id}: {response.url} "
+                f"(Depth: {current_depth})"
+            )
+
+            # Early return if we've reached depth limit
+            if current_depth >= self.forward_depth_limit:
+                self.logger.debug(f"Skipping samples page processing: depth limit reached ({current_depth})")
+                return
 
             # Extract all samples from the page
             sample_entries = response.css('td.tdata__td1')
@@ -275,7 +313,15 @@ class SampleSpider(scrapy.Spider):
             source_track_id = response.meta.get('source_track_id')
             current_depth = response.meta.get('depth', 0)
 
-            self.logger.info(f"Parsing sample page: {response.url}")
+            self.logger.info(
+                f"Parsing sample page: {response.url} "
+                f"(Depth: {current_depth})"
+            )
+
+            # Early return if we've reached depth limit
+            if current_depth >= self.forward_depth_limit:
+                self.logger.debug(f"Skipping sample page processing: depth limit reached ({current_depth})")
+                return
 
             # Extract the sampled track information (target)
             target_entry_box = response.css('div.sampleEntryBox')[1] if len(
@@ -287,8 +333,8 @@ class SampleSpider(scrapy.Spider):
                 target_url_parts = target_url.split('/')
                 target_track_id = '/'.join(target_url_parts[-3:-1]) if len(target_url_parts) > 2 else None
 
-                # Create relationship ID
-                relationship = f'{source_track_id}-samples-{target_track_id}'
+                # Create relationship ID with depth component to prevent loops
+                relationship = f'{source_track_id}-samples-{target_track_id}-{min(current_depth, 10)}'
 
                 # Check if we've already processed this relationship
                 if relationship not in self.sample_relationships and target_track_id:
@@ -327,7 +373,8 @@ class SampleSpider(scrapy.Spider):
                             callback=self.parse_track,
                             meta={
                                 'track_type': 'sampled',
-                                'depth': current_depth
+                                'depth': current_depth + 1,
+                                'parent_track_id': source_track_id
                             }
                         )
 
@@ -359,7 +406,7 @@ class SampleSpider(scrapy.Spider):
                         callback=self.parse_sampled_page,
                         meta={
                             'source_track_id': track_id,
-                            'depth': current_depth + 1
+                            'depth': current_depth
                         }
                     )
             else:
@@ -381,13 +428,13 @@ class SampleSpider(scrapy.Spider):
                             full_url = urljoin(response.url, sample_link)
                             if full_url not in self.visited_urls:
                                 self.visited_urls.add(full_url)
-                                time.sleep(1) # explicit delay to avoid being blocked
+                                time.sleep(1)  # explicit delay to avoid being blocked
                                 yield scrapy.Request(
                                     url=full_url,
                                     callback=self.parse_sample_page_reverse,
                                     meta={
                                         'target_track_id': track_id,  # This track was sampled
-                                        'depth': current_depth + 1
+                                        'depth': current_depth
                                     }
                                 )
                 else:
@@ -404,14 +451,22 @@ class SampleSpider(scrapy.Spider):
             source_track_id = response.meta.get('source_track_id')
             current_depth = response.meta.get('depth', 0)
 
-            self.logger.info(f"Parsing sampled page for track {source_track_id}: {response.url}")
+            self.logger.info(
+                f"Parsing sampled page for track {source_track_id}: {response.url} "
+                f"(Depth: {current_depth})"
+            )
+
+            # Early return if we've reached depth limit
+            if current_depth >= self.reverse_depth_limit:
+                self.logger.debug(f"Skipping sampled page processing: depth limit reached ({current_depth})")
+                return
 
             # Extract all samplers from the page
             sampler_entries = response.css('td.tdata__td1')
 
             self.logger.info(f"Found {len(sampler_entries)} samplers on dedicated sampled page for {source_track_id}")
 
-            for entry in sampler_entries:
+            for entry in sampler_entries[:10]:
                 # Get the sample link
                 sample_link = entry.css('a::attr(href)').get()
 
@@ -444,7 +499,15 @@ class SampleSpider(scrapy.Spider):
             target_track_id = response.meta.get('target_track_id')
             current_depth = response.meta.get('depth', 0)
 
-            self.logger.info(f"Parsing sample page (reverse): {response.url}")
+            self.logger.info(
+                f"Parsing sample page (reverse): {response.url} "
+                f"(Depth: {current_depth})"
+            )
+
+            # Early return if we've reached depth limit
+            if current_depth >= self.reverse_depth_limit:
+                self.logger.debug(f"Skipping sample page reverse processing: depth limit reached ({current_depth})")
+                return
 
             # Extract the sampler track information (source)
             source_entry_box = response.css('div.sampleEntryBox')[0] if len(
@@ -456,8 +519,8 @@ class SampleSpider(scrapy.Spider):
                 source_url_parts = source_url.split('/')
                 source_track_id = '/'.join(source_url_parts[-3:-1]) if len(source_url_parts) > 2 else None
 
-                # Create relationship ID
-                relationship = f'{source_track_id}-samples-{target_track_id}'
+                # Create relationship ID with depth component to prevent loops
+                relationship = f'{source_track_id}-samples-{target_track_id}-{min(current_depth, 10)}'
 
                 # Check if we've already processed this relationship
                 if relationship not in self.sample_relationships and source_track_id:
@@ -495,10 +558,11 @@ class SampleSpider(scrapy.Spider):
                         self.visited_urls.add(full_url)
                         yield scrapy.Request(
                             url=full_url,
-                            callback=self.parse_track,
+                            callback=self.parse_track + 1,
                             meta={
                                 'track_type': 'sampler',
-                                'depth': current_depth
+                                'depth': current_depth,
+                                'parent_track_id': target_track_id
                             }
                         )
 
@@ -520,3 +584,4 @@ class SampleSpider(scrapy.Spider):
         self.logger.info(f"Reverse relationships: {self.stats['reverse_relationships']}")
         self.logger.info(f"'See all' samples buttons found: {self.stats['see_all_samples_found']}")
         self.logger.info(f"'See all' sampled buttons found: {self.stats['see_all_sampled_found']}")
+        self.logger.info(f"Maximum depth reached: {self.stats['max_depth_reached']}")
