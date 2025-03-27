@@ -20,7 +20,7 @@ class SampleSpider(scrapy.Spider):
     """
     name = "samples"
     allowed_domains = ["whosampled.com"]
-    start_urls = ["https://www.whosampled.com/browse/year/2024"]
+    start_urls = ["https://www.whosampled.com/browse/year/2024/10"]
 
     def __init__(self, *args, **kwargs):
         super(SampleSpider, self).__init__(*args, **kwargs)
@@ -333,8 +333,8 @@ class SampleSpider(scrapy.Spider):
                 target_url_parts = target_url.split('/')
                 target_track_id = '/'.join(target_url_parts[-3:-1]) if len(target_url_parts) > 2 else None
 
-                # Create relationship ID with depth component to prevent loops
-                relationship = f'{source_track_id}-samples-{target_track_id}-{min(current_depth, 10)}'
+                # Create relationship ID
+                relationship = f'{source_track_id}-samples-{target_track_id}'
 
                 # Check if we've already processed this relationship
                 if relationship not in self.sample_relationships and target_track_id:
@@ -558,10 +558,10 @@ class SampleSpider(scrapy.Spider):
                         self.visited_urls.add(full_url)
                         yield scrapy.Request(
                             url=full_url,
-                            callback=self.parse_track + 1,
+                            callback=self.parse_track,
                             meta={
                                 'track_type': 'sampler',
-                                'depth': current_depth,
+                                'depth': current_depth + 1,
                                 'parent_track_id': target_track_id
                             }
                         )
