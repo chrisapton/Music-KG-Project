@@ -73,4 +73,5 @@ def relationships_jsonl_to_csv(jsonl_path, csv_path):
 
 # Example usage
 # tracks_jsonl_to_csv("../../data/processed/whosampled_tracks_2024.jsonl", "../data/neo4j/whosampled_tracks_2024.csv")
-relationships_jsonl_to_csv( "../../data/processed/whosampled_relationships_2024.jsonl", "../../data/neo4j/whosampled_relationships_2024.csv")
+relationships_jsonl_to_csv( "../../data/processed/whosampled_relationships_2024.jsonl",
+                            "../neo4j/data/import/whosampled_relationships_2024.csv")
