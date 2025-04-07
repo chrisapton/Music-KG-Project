@@ -13,6 +13,9 @@
 
 - **Year**
   - The release year of a song or album.
+  
+- **Date**
+  - The release date of a song or album.
 
 - **Producer**
   - An individual responsible for the production of a song.
@@ -47,6 +50,9 @@
 
 - `RELEASED_IN (Song → Year)`
   - Connects a song with its release year.
+  
+- `RELEASED_DATE (Song → Date)`
+  - Connects a song with its release date.
 
 - `PART_OF_ALBUM (Song → Album)`
   - Links a song to the album it is part of.
@@ -77,6 +83,9 @@
 
 - **Year**
   - `value`: integer (e.g., 1997)
+  
+- **Date**
+  - `value`: string
 
 - **Producer**
   - `name`: string
