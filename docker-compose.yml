@@ -1,0 +1,20 @@
+version: '3.9'
+
+services:
+  neo4j:
+    image: neo4j:5
+    container_name: neo4j
+    ports:
+      - "7474:7474"   # HTTP access (Neo4j browser)
+      - "7687:7687"   # Bolt protocol (Python driver, etc.)
+    environment:
+      - NEO4J_AUTH=neo4j/testpassword
+    volumes:
+      - neo4j_data:/data        # Data volume for persistence
+      - neo4j_logs:/logs        # Optional: logs
+      - ./data/neo4j:/var/lib/neo4j/import  # import directory
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:
