@@ -10,9 +10,9 @@ services:
     environment:
       - NEO4J_AUTH=neo4j/testpassword
     volumes:
-      - neo4j_data:/data        # Data volume for persistence
-      - neo4j_logs:/logs        # Optional: logs
-      - ./data/neo4j:/var/lib/neo4j/import  # import directory
+      - ./data/data:/data
+#      - ./data/neo4j/logs:/logs
+      - ./data/import:/var/lib/neo4j/import
 
 volumes:
   neo4j_data:
