@@ -58,4 +58,35 @@ SET r.timestamp = datetime(row.timestamp),
     r.source_timestamps = split(row.timestamp_in_source, ';'),
     r.target_timestamps = split(row.timestamp_in_target, ';');
 ```
+```cypher
+LOAD CSV WITH HEADERS FROM 'file:///whosampled_relationships_2024.csv' AS row
+MATCH (source:Song {id: row.source_id})
+MATCH (target:Song {id: row.target_id})
+MERGE (source)-[r:SAMPLES]->(target)
+SET r.source_timestamps = split(row.timestamp_in_source, ';'),
+    r.target_timestamps = split(row.timestamp_in_target, ';');
+```
 
+## Music Brainz Data
+```cypher
+// Load release dates
+LOAD CSV WITH HEADERS FROM 'file:///musicbrainz_dates_2022.csv' AS row
+MATCH (s:Song {id: row.id})
+SET s.release_date = CASE 
+        WHEN row.release_date <> '' THEN date(row.release_date)
+        ELSE s.release_date
+    END;
+```
+```cypher
+// Load genres
+LOAD CSV WITH HEADERS FROM 'file:///musicbrainz_genres_2022.csv' AS row
+MATCH (s:Song {id: row.song_id})
+MERGE (g:Genre {name: row.genre})
+MERGE (s)-[:BELONGS_TO_GENRE]->(g);
+```
+```cypher
+// Load artist summaries
+LOAD CSV WITH HEADERS FROM 'file:///musicbrainz_summaries_2022.csv' AS row
+MATCH (a:Artist {name: row.artist_name})
+SET a.wikipedia_summary = row.wikipedia_summary;
+```

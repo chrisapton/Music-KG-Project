@@ -57,9 +57,11 @@
 - **Song**
   - `title`: string
   - `id`: string
+  - `release_date`: date (e.g., `"2022-12-02"`)
 
 - **Artist**
   - `name`: string
+  - `wikipedia_summary`: string *(full text summary, optional; stored as a property)*
 
 - **Genre**
   - `name`: string
