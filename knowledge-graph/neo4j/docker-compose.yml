@@ -9,12 +9,17 @@ services:
       - "7687:7687"   # Bolt protocol (Python driver, etc.)
     environment:
       - NEO4J_AUTH=neo4j/testpassword
+      - NEO4J_PLUGINS=["apoc", "bloom", "graph-data-science"]
     volumes:
       - ./data/data:/data
 #      - ./data/neo4j/logs:/logs
       - ./data/import:/var/lib/neo4j/import
 
-volumes:
-  neo4j_data:
-  neo4j_logs:
-  neo4j_import:
+  neodash:
+    image: nielsdejong/neodash:latest
+    platform: linux/amd64
+    container_name: neodash
+    ports:
+      - "5005:5005"
+    depends_on:
+      - neo4j
