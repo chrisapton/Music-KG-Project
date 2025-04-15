@@ -4,7 +4,12 @@ import streamlit.components.v1 as components
 from neo4j_utils import Neo4jConnection
 
 # Setup Neo4j connection
-conn = Neo4jConnection("bolt://localhost:7687", "neo4j", "password")  # Replace with your creds
+
+NEO4J_URI = "bolt://localhost:7687"
+NEO4J_USER = "neo4j"
+NEO4J_PASSWORD = "testpassword"  # from your docker-compose.yml
+
+conn = Neo4jConnection(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)  # Replace with your creds
 
 st.title("🎶 Music Knowledge Graph Explorer")
 
