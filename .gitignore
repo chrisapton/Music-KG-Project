@@ -177,4 +177,4 @@ cython_debug/
 data
 scrapers/proxy.py
 scrapers/proxies_list.txt
-knowledge-graph/neo4j/data/data
+knowledge-graph/neo4j/data/data/
