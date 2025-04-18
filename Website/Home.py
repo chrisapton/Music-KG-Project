@@ -6,7 +6,8 @@ st.set_page_config(
     layout="wide"
 )
 
-st.markdown("# 🎶 Music Knowledge Graph Explorer")
+st.markdown("# 🎶 Music Sampling Knowledge Graph")
+st.sidebar.success("Select a page above.")
 st.write(
     """
     Welcome!  
