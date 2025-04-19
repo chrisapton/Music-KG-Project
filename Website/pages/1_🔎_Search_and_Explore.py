@@ -7,19 +7,35 @@ import networkx as nx
 import streamlit.components.v1 as components
 from neo4j_utils import Neo4jConnection
 
-st.set_page_config(page_title="Search & Explore", page_icon="🔍", layout="wide")
-st.markdown("# 🔍 Search & Explore")
-st.sidebar.header("Search & Explore")
-
-# Sidebar controls
-search_type = st.sidebar.selectbox("Search Type", ["Artist", "Song"])
-query = st.text_input(f"Enter {search_type} name or title")
-
 # Neo4j connection
 conn = Neo4jConnection("bolt://localhost:7687", "neo4j", "testpassword")
 
-if query:
-    ### ARTIST SEARCH ###
+st.set_page_config(page_title="Search & Explore", page_icon="🔍", layout="wide")
+
+# ─────────────────────── sidebar ───────────────────────
+st.sidebar.header("Search Mode")
+search_type = st.sidebar.selectbox("Search Type", ["Artist", "Song"])
+
+# ─────────────────────── main page ─────────────────────
+st.markdown("# 🔍 Search & Explore")
+
+with st.form("search_form"):
+    if search_type == "Artist":
+        query = st.text_input("Artist name")
+        artist_filter = None            # not used
+    else:
+        query = st.text_input("Song title")
+        artist_filter = st.text_input("Filter by artist (optional)")
+
+    submitted = st.form_submit_button("Search")
+
+if submitted:
+    if not query:
+        st.error("Please enter a search query.")
+        conn.close()
+        st.stop()
+
+    # --- Artist Search -------------------------------------------------------
     if search_type == "Artist":
         artist = query
         try:
@@ -197,59 +213,65 @@ if query:
         components.html(html, height=700, scrolling=True)
 
     else:
+        # --- Song Search -------------------------------------------------------
         title = query
         # Basic song info
-        info = conn.query(
-            """
-            MATCH (s:Song {title:$title})
-            OPTIONAL MATCH (s)<-[:PERFORMS]-(a:Artist)
-            OPTIONAL MATCH (s)-[:HAS_GENRE]->(g:Genre)
-            RETURN s.release_date AS rd,
-                   s.label AS label,
-                   s.wiki_summary AS summary,
-                   collect(DISTINCT a.name) AS artists,
-                   collect(DISTINCT g.name) AS genres,
-                   avg(a.popularity) AS artist_popularity,
-                   id(s) AS song_id
-            """,
-            {"title": title}
-        )[0]
+        try:
+            info = conn.query(
+                """
+                MATCH (s:Song {title:$title})
+                OPTIONAL MATCH (s)-[:HAS_ARTIST]->(a:Artist {name:$artist_filter})
+                OPTIONAL MATCH (s)-[:BELONGS_TO_GENRE]->(g:Genre)
+                OPTIONAL MATCH (s)-[:PART_OF_ALBUM]->(al:Album)
+                RETURN s.release_date AS rd,
+                       al.title AS album,
+                       s.record_label AS label,
+                       collect(DISTINCT a.name) AS artists,
+                       collect(DISTINCT g.name) AS genres,
+                       s.id AS song_id
+                """,
+                {"title": title, "artist_filter": artist_filter}
+            )[0]
+        except (IndexError, KeyError):
+            st.error(f"Song '{title}' not found.")
+            conn.close()
+            st.stop()
+
         rd = info.get('rd', 'N/A')
+        album = info.get('album', 'N/A')
         label = info.get('label', 'N/A')
-        summary = info.get('summary', 'No summary.')
         artists = info.get('artists', [])
         genres = info.get('genres', [])
-        pop = round(info.get('artist_popularity', 0), 1) if info.get('artist_popularity') else 'N/A'
+        song_id = info.get('song_id', None)
 
         st.markdown(f"**Song:** {title}")
         st.markdown(f"**Artist(s):** {', '.join(artists)}")
+        st.markdown(f"**Album:** {album}")
         st.markdown(f"**Release Date:** {rd}")
         st.markdown(f"**Genres:** {', '.join(genres)}")
-        st.markdown(f"**Label:** {label}")
-        st.markdown(f"**Wikipedia Summary:** {summary}")
-        st.markdown(f"**Artist Popularity:** {pop}")
+        st.markdown(f"**Record Label:** {label}")
 
         # Sampling stats
         outgoing = conn.query(
             """
-            MATCH (s:Song {title:$title})-[r:SAMPLES]->()
+            MATCH (s:Song {id:$song_id})-[r:SAMPLES]->()
             RETURN count(r) AS cnt
             """,
-            {"title": title}
+            {"song_id": song_id}
         )[0]['cnt']
         incoming = conn.query(
             """
-            MATCH ()-[r:SAMPLES]->(s:Song {title:$title})
+            MATCH ()-[r:SAMPLES]->(s:Song {id:$song_id})
             RETURN count(r) AS cnt
             """,
-            {"title": title}
+            {"song_id": song_id}
         )[0]['cnt']
         chains = conn.query(
             """
-            MATCH path=(o:Song)-[:SAMPLES*2]-(s:Song {title:$title})
+            MATCH path=(o:Song)-[:SAMPLES*2]-(s:Song {id:$song_id})
             RETURN count(DISTINCT o) AS cnt
             """,
-            {"title": title}
+            {"song_id": song_id}
         )[0]['cnt']
         st.markdown("**🧬 Sampling Stats:**")
         st.write(f"- Sampled {outgoing} other songs")
@@ -259,50 +281,78 @@ if query:
         # Songs This Track Sampled
         sampled = conn.query(
             """
-            MATCH (s:Song {title:$title})-[r:SAMPLES]->(t:Song)
-            OPTIONAL MATCH (t)<-[:PERFORMS]-(a:Artist)
-            RETURN t.title AS name, a.name AS artist, t.release_date AS rd
-            ORDER BY rd
+            MATCH (s:Song {id:$song_id})-[:SAMPLES]->(t:Song)
+            OPTIONAL MATCH (t)-[:HAS_ARTIST]->(a:Artist)
+            WITH t, collect(DISTINCT a.name) AS artist_list
+            RETURN
+                t.title AS name,
+                apoc.text.join(artist_list, ', ') AS artists,
+                t.release_date AS rd
+            ORDER BY rd DESC
             """,
-            {"title": title}
+            {"song_id": song_id}
         )
         st.markdown("**🎧 Songs This Track Sampled:**")
-        for rec in sampled:
-            st.write(f"- “{rec['name']}” by {rec['artist']} ({rec['rd']})")
+        with st.expander("See Songs Sampled by This Track"):
+            for rec in sampled:
+                st.write(f"- “{rec['name']}” by {rec['artists']} ({rec['rd']})")
 
         # Songs That Sampled This Track
         samp_by = conn.query(
             """
-            MATCH (o:Song)-[r:SAMPLES]->(s:Song {title:$title})
-            OPTIONAL MATCH (o)<-[:PERFORMS]-(a:Artist)
-            RETURN o.title AS name, a.name AS artist, o.release_date AS rd
+            MATCH (o:Song)-[r:SAMPLES]->(s:Song {id:$song_id})
+            OPTIONAL MATCH (o)-[:HAS_ARTIST]->(a:Artist)
+            WITH o, collect(DISTINCT a.name) AS artist_list
+            RETURN
+                o.title AS name,
+                apoc.text.join(artist_list, ', ') AS artists,
+                o.release_date AS rd
             ORDER BY rd DESC
             """,
-            {"title": title}
+            {"song_id": song_id}
         )
         st.markdown("**🔁 Songs That Sampled This Track:**")
-        for rec in samp_by:
-            st.write(f"- “{rec['name']}” by {rec['artist']} ({rec['rd']})")
+        with st.expander("See Songs That Sampled This Track"):
+            for rec in samp_by:
+                st.write(f"- “{rec['name']}” by {rec['artists']} ({rec['rd']})")
 
         # Sample Usage Over Time
         df_time = pd.DataFrame(conn.query(
             """
-            MATCH ()-[r:SAMPLES]->(s:Song {title:$title})
-            RETURN r.timestamp AS ts
+            MATCH (o:Song)-[:SAMPLES]->(s:Song {id:$song_id})
+            MATCH (o)-[:RELEASED_IN]->(y:Year)
+            WITH y.value            AS year,
+                 collect(o.title)   AS songs,          // list for the tooltip
+                 count(*)           AS n               // total samples that year
+            RETURN year, n, songs
+            ORDER BY year
             """,
-            {"title": title}
+            {"song_id": song_id}
         ))
         st.markdown("**📈 Sample Usage Over Time:**")
-        if not df_time.empty:
-            df_time["year"] = pd.to_datetime(df_time["ts"]).dt.year
-            df_count = df_time["year"].value_counts().sort_index().reset_index()
-            df_count.columns = ["year","count"]
-            chart = alt.Chart(df_count).mark_line().encode(
-                x="year:O", y="count:Q", tooltip=["year","count"]
-            ).properties(width=700, height=300)
-            st.altair_chart(chart, use_container_width=True)
-        else:
+        if df_time.empty:
             st.info("No sampling events.")
+        else:
+            df_time["songs_tooltip"] = df_time["songs"].apply(
+                lambda lst: ", ".join(lst[:10]) + ("… (+%d more)" % (len(lst) - 15) if len(lst) > 15 else "")
+            )
+
+            bar = (
+                alt.Chart(df_time)
+                .mark_bar(color="#1f77b4")
+                .encode(
+                    x=alt.X("year:O", title="Year"),
+                    y=alt.Y("n:Q", title="# of samples"),
+                    tooltip=[
+                        alt.Tooltip("year:O", title="Year"),
+                        alt.Tooltip("n:Q", title="Samples"),
+                        alt.Tooltip("songs_tooltip:N", title="Songs that sampled")
+                    ]
+                )
+                .properties(width=700, height=350)
+            )
+
+            st.altair_chart(bar, use_container_width=True)
 
         # Graph Visualization
         results = conn.query(
