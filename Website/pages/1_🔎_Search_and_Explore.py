@@ -217,6 +217,7 @@ if submitted:
         title = query
         # Basic song info
         try:
+            # Fix to get multiple artists
             info = conn.query(
                 """
                 MATCH (s:Song {title:$title})
