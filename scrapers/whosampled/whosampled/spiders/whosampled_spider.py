@@ -20,7 +20,7 @@ class SampleSpider(scrapy.Spider):
     """
     name = "samples"
     allowed_domains = ["whosampled.com"]
-    start_urls = ["https://www.whosampled.com/browse/year/2024/10"]
+    start_urls = ["https://www.whosampled.com/browse/year/2021/2"]
 
     def __init__(self, *args, **kwargs):
         super(SampleSpider, self).__init__(*args, **kwargs)
