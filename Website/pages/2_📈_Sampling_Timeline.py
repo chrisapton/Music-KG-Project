@@ -29,14 +29,12 @@ if df.empty:
     st.stop()
 
 # ─────────────────────── SIDEBAR FILTERS ───────────────────────
-max_count = int(df["count"].max())
-min_count = st.sidebar.slider("Minimum number of samples", 1, max_count, min(5, max_count))
-df = df[df["count"] >= min_count]
+# max_count = int(df["count"].max())
+# min_count = st.sidebar.slider("Minimum number of samples", 1, max_count, min(5, max_count))
+# df = df[df["count"] >= min_count]
 
 top_n = st.sidebar.slider("Max number of flows to display", 5, 100, 25)
 df = df.sort_values("count", ascending=False).head(top_n)
-
-import plotly.graph_objects as go
 
 # Group and filter
 df_grouped = df.groupby(["source_genre", "target_genre"], as_index=False)["count"].sum()
