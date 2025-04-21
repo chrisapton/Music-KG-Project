@@ -366,22 +366,40 @@ if submitted:
             """,
             {"title": title}
         )
+        COLOR_MAP = {
+            "Artist": "blue",
+            "Song": "green",
+            "SampledSong": "orange",
+        }
+
         net = Network(height="500px", width="100%", notebook=False)
         added = set()
         for rec in results:
-            nid = rec['n_id']; labs = rec['n_labels']
+            nid = rec['n_id']
+            labs = rec['n_labels']
             label = rec['s'].get('name', rec['s'].get('title', ''))
+
             if nid not in added:
-                net.add_node(nid, label=label, title=(labs[0] if labs else ''))
+                node_type = labs[0] if labs else 'Unknown'
+                node_color = COLOR_MAP.get(node_type, "gray")
+                net.add_node(nid, label=label, title=node_type, color=node_color)
                 added.add(nid)
-            mid = rec['m_id']; mlabs = rec['m_labels']
-            mlabel = rec['m'].get('name', rec['m'].get('title',''))
+
+            mid = rec['m_id']
+            mlabs = rec['m_labels']
+            mlabel = rec['m'].get('name', rec['m'].get('title', ''))
+
             if mid not in added:
-                net.add_node(mid, label=mlabel, title=(mlabs[0] if mlabs else ''))
+                node_type = mlabs[0] if mlabs else 'Unknown'
+                node_color = COLOR_MAP.get(node_type, "gray")
+                net.add_node(mid, label=mlabel, title=node_type, color=node_color)
                 added.add(mid)
+
             net.add_edge(nid, mid, label=rec['rel_type'])
+
         net.save_graph("song_graph.html")
-        with open("song_graph.html","r") as f:
+        with open("song_graph.html", "r") as f:
             components.html(f.read(), height=550, scrolling=True)
+
 
 conn.close()
