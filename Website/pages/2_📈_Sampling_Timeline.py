@@ -88,7 +88,6 @@ fig = go.Figure(data=[go.Sankey(
     )
 )])
 
-# Calculate height dynamically: 30–40px per node + padding
 nodes_per_column = max(
     df_grouped["source_label"].nunique(),
     df_grouped["target_label"].nunique()
@@ -101,7 +100,7 @@ fig.update_layout(
     height=dynamic_height,
 )
 
-fig.data[0].update(textfont=dict(color="black")) # Example
+fig.data[0].update(textfont=dict(color="black"))
 
 st.plotly_chart(fig, use_container_width=True)
 
