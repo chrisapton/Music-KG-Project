@@ -170,40 +170,85 @@ if submitted:
 
         # Build NetworkX graph for song
         st.markdown("### Artist-Song Sampling Network")
+
         records = conn.query(
             """
             MATCH (a:Artist {name:$artist})
-            OPTIONAL MATCH (a)<-[p:HAS_ARTIST]-(s:Song)
+            OPTIONAL MATCH (a)<-[:HAS_ARTIST]-(s:Song)
+            WHERE s IS NOT NULL
             OPTIONAL MATCH (s)-[r:SAMPLES]->(t:Song)
-            RETURN id(a) AS a_id, a.name AS a_name,
-                   id(s) AS s_id, s.title AS s_name,
-                   id(t) AS t_id, t.title AS t_name,
-                   type(r) AS rel_type
+            OPTIONAL MATCH (s)-[:HAS_ARTIST]->(sa:Artist)
+            OPTIONAL MATCH (s)-[:BELONGS_TO_GENRE]->(sg:Genre)
+            OPTIONAL MATCH (t)-[:HAS_ARTIST]->(ta:Artist)
+            OPTIONAL MATCH (t)-[:BELONGS_TO_GENRE]->(tg:Genre)
+            RETURN 
+                id(a) AS a_id, a.name AS a_name,
+                id(s) AS s_id, s.title AS s_name,
+                id(t) AS t_id, t.title AS t_name,
+                type(r) AS rel_type,
+                collect(DISTINCT sa.name) AS song_artists,
+                s.release_date AS s_release_date,
+                collect(DISTINCT sg.name) AS s_genres,
+                collect(DISTINCT ta.name) AS t_artists,
+                t.release_date AS t_release_date,
+                collect(DISTINCT tg.name) AS t_genres
             LIMIT 200
             """,
             {"artist": artist}
         )
+
         G = nx.DiGraph()
+
+        # Helpers
+        def fmt_list(lst):
+            return ', '.join(str(x) for x in lst) if lst else 'N/A'
+
+        def safe_title(value):
+            return value if value else "Untitled"
+
         # Add nodes and edges
         for rec in records:
-            a_id = str(rec['a_id'])
-            a_name = str(rec['a_name'])
-            s_id = str(rec['s_id']) if rec['s_id'] is not None else None
-            t_id = str(rec['t_id']) if rec['t_id'] is not None else None
+            a_id = str(rec["a_id"])
+            a_name = safe_title(rec["a_name"])
+            s_id = str(rec["s_id"]) if rec["s_id"] is not None else None
+            t_id = str(rec["t_id"]) if rec["t_id"] is not None else None
 
             # Artist node
             if not G.has_node(a_id):
-                G.add_node(a_id, label=a_name, color='blue', type='Artist')
+                G.add_node(a_id, label=a_name, color="blue", type="Artist")
+
             # Song performed by artist
             if s_id is not None:
                 if not G.has_node(s_id):
-                    G.add_node(s_id, label=rec['s_name'], color='green', type='Song')
-                G.add_edge(s_id, a_id, color='blue')
+                    G.add_node(
+                        s_id,
+                        label=safe_title(rec["s_name"]),
+                        color="green",
+                        type="Song",
+                        title=f"""<b>Song:</b> {safe_title(rec["s_name"])}<br>
+                                <b>Artist(s):</b> {fmt_list(rec.get("song_artists"))}<br>
+                                <b>Release Date:</b> {rec.get("s_release_date", "N/A")}<br>
+                                <b>Genres:</b> {fmt_list(rec.get("s_genres"))}"""
+                    )
+                G.add_edge(s_id, a_id, color="blue")
+
             # Songs sampled by this song
             if t_id is not None:
                 if not G.has_node(t_id):
-                    G.add_node(t_id, label=rec['t_name'], color='orange', type='Song')
-                G.add_edge(s_id, t_id, label=rec['rel_type'])
+                    G.add_node(
+                        t_id,
+                        label=safe_title(rec["t_name"]),
+                        color="orange",
+                        type="Song",
+                        title=f"""<b>Sampled Song:</b> {safe_title(rec["t_name"])}<br>
+                                <b>Artist(s):</b> {fmt_list(rec.get("t_artists"))}<br>
+                                <b>Release Date:</b> {rec.get("t_release_date", "N/A")}<br>
+                                <b>Genres:</b> {fmt_list(rec.get("t_genres"))}"""
+                    )
+                G.add_edge(s_id, t_id, label=rec["rel_type"])
+
+
+
 
         nt = Network(height="700px", width="100%", directed=True)
         nt.from_nx(G)
