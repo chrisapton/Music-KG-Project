@@ -4,8 +4,8 @@ from neo4j_utils import Neo4jConnection
 import plotly.graph_objects as go
 
 # ─────────────────────── PAGE SETUP ───────────────────────
-st.set_page_config(page_title="Sampling Timeline", page_icon="📈", layout="wide")
-st.title("📈 Genre-to-Genre Sampling Flow")
+st.set_page_config(page_title="Sampling Flow", page_icon="📊", layout="wide")
+st.title("📊 Genre-to-Genre Sampling Flow")
 st.sidebar.header("Visualization Settings")
 
 # ─────────────────────── NEO4J QUERY ───────────────────────
