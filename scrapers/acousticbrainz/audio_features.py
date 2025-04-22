@@ -48,16 +48,19 @@ def get_features(mbids):
     return None, None
 
 
-IN_FILE  = "../../data/processed/whosampled_tracks_2024.jsonl"
-OUT_FILE = "../../data/raw/acousticbrainz_2024.jsonl"
+IN_FILE  = "../../data/processed/whosampled_tracks_2022.jsonl"
+OUT_FILE = "../../data/raw/acousticbrainz_2022.jsonl"
 
 counter, matched = 0, 0
 with open(IN_FILE, "r", encoding="utf-8") as rf, \
-     open(OUT_FILE, "w", encoding="utf-8") as wf:
+     open(OUT_FILE, "a", encoding="utf-8") as wf:
 
     for line in rf:
         counter += 1
         rec = json.loads(line)
+        if not rec.get("artist") or not rec.get("title"):
+            log.info("No artist/title: %s", rec)
+            continue
         if isinstance(rec['artist'], list):
             rec["artist"] = rec["artist"][0]
         mbids = search_recordings(rec["artist"], rec["title"], limit=5)
@@ -75,6 +78,6 @@ with open(IN_FILE, "r", encoding="utf-8") as rf, \
                              "features": features}, ensure_ascii=True) + "\n")
         matched += 1
         log.info("✓ %s – %s (MBID %s)", rec["artist"], rec["title"], mbid)
-        time.sleep(1)           # API politeness
+        time.sleep(1)
 
 log.info("Finished. %d tracks processed, %d matched with AB data.", counter, matched)

@@ -5,6 +5,8 @@ import tempfile
 import subprocess
 import os
 import requests
+from dotenv import load_dotenv
+load_dotenv()
 
 # ── logging ─────────────────────────────────────────
 logging.basicConfig(
@@ -51,8 +53,17 @@ def download_preview(url):
 def run_essentia(audio_path):
     """Run essentia_streaming_extractor_music; return JSON dict."""
     out_json = audio_path + ".json"
-    cmd = ["streaming_extractor_music", audio_path, out_json]
+    SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+    profile = os.path.join(SCRIPT_DIR, "profile_highlevel.yaml")
+    cmd = [
+        "essentia_streaming_extractor_music",
+        audio_path,
+        out_json,
+        profile
+    ]
+
     subprocess.run(cmd, check=True)
+
     with open(out_json, "r", encoding="utf-8") as fh:
         data = json.load(fh)
     # clean up temp files
@@ -69,15 +80,15 @@ with open(CHECK_FILE, "r", encoding="utf-8") as f:
     existing_wsids = set()
     for line in f:
         rec = json.loads(line)
-        existing_wsids.add(rec["wsid"])
+        existing_wsids.add(rec["whosampled_id"])
 
 with open(IN_FILE, "r", encoding="utf-8") as rf, \
      open(OUT_FILE, "w", encoding="utf-8") as wf:
 
     for line in rf:
         rec = json.loads(line)
-        if rec["id"] in existing_wsids:
-            log.info("Already exists: %s", rec["id"])
+        if rec["whosampled_id"] in existing_wsids:
+            log.info("Already exists: %s", rec["whosampled_id"])
             continue
 
         artist_names = rec["artist"] if isinstance(rec["artist"], list) else [rec["artist"]]
@@ -102,7 +113,7 @@ with open(IN_FILE, "r", encoding="utf-8") as rf, \
             continue
 
         out = {
-            "wsid":   rec["id"],
+            "whosampled_id":   rec["whosampled_id"],
             "deezer_track_id": track_id,
             "features": features
         }
