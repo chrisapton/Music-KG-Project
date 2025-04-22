@@ -200,8 +200,13 @@ if submitted:
         G = nx.DiGraph()
 
         # Helpers
-        def fmt_list(lst):
-            return ', '.join(str(x) for x in lst) if lst else 'N/A'
+        def fmt_list(lst, limit=None):
+            if not lst:
+                return 'N/A'
+            if limit:
+                lst = lst[:limit]
+            return ', '.join(str(x) for x in lst)
+
 
         def safe_title(value):
             return value if value else "Untitled"
@@ -225,10 +230,10 @@ if submitted:
                         label=safe_title(rec["s_name"]),
                         color="green",
                         type="Song",
-                        title=f"""<b>Song:</b> {safe_title(rec["s_name"])}<br>
-                                <b>Artist(s):</b> {fmt_list(rec.get("song_artists"))}<br>
-                                <b>Release Date:</b> {rec.get("s_release_date", "N/A")}<br>
-                                <b>Genres:</b> {fmt_list(rec.get("s_genres"))}"""
+                        title=f"""Song: {safe_title(rec["s_name"])}
+                                Artist(s): {fmt_list(rec.get("song_artists"))}
+                                Release Date: {rec.get("s_release_date", "N/A")}
+                                Genres: {fmt_list(rec.get("s_genres"), 3)}"""
                     )
                 G.add_edge(s_id, a_id, color="blue")
 
@@ -240,21 +245,17 @@ if submitted:
                         label=safe_title(rec["t_name"]),
                         color="orange",
                         type="Song",
-                        title=f"""<b>Sampled Song:</b> {safe_title(rec["t_name"])}<br>
-                                <b>Artist(s):</b> {fmt_list(rec.get("t_artists"))}<br>
-                                <b>Release Date:</b> {rec.get("t_release_date", "N/A")}<br>
-                                <b>Genres:</b> {fmt_list(rec.get("t_genres"))}"""
+                        title=f"""Sampled Song: {safe_title(rec["t_name"])}
+                                Artist(s): {fmt_list(rec.get("t_artists"))}
+                                Release Date: {rec.get("t_release_date", "N/A")}
+                                Genres: {fmt_list(rec.get("t_genres"), 3)}"""
                     )
                 G.add_edge(s_id, t_id, label=rec["rel_type"])
-
-
-
 
         nt = Network(height="700px", width="100%", directed=True)
         nt.from_nx(G)
         nt.set_options("""var options={ "physics":{ "solver":"forceAtlas2Based" } }""")
         html = nt.generate_html()
-
         components.html(html, height=700, scrolling=True)
 
     else:
