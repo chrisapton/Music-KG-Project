@@ -284,10 +284,11 @@ if submitted:
                 OPTIONAL MATCH (s)-[:HAS_ARTIST]->(a:Artist)
                 OPTIONAL MATCH (s)-[:BELONGS_TO_GENRE]->(g:Genre)
                 OPTIONAL MATCH (s)-[:PART_OF_ALBUM]->(al:Album)
+                OPTIONAL MATCH (s)-[:RELEASED_IN]->(y:Year)
                 WITH s, al, collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres,
-                    s.record_label AS label, s.release_date AS rd
+                    s.record_label AS label, s.release_date AS rd, y.value AS year
                 WHERE $artist_filter IS NULL OR $artist_filter IN artists
-                RETURN rd, al.title AS album, label, artists, genres, s.id AS song_id
+                RETURN rd, year, al.title AS album, label, artists, genres, s.id AS song_id
                 """,
                 {"title": title, "artist_filter": artist_filter}
             )[0]
@@ -296,7 +297,12 @@ if submitted:
             conn.close()
             st.stop()
 
-        rd = info.get('rd', 'N/A')
+        def format_release(date_val, year_val):
+            if date_val is None or date_val == "None":
+                return str(year_val) if year_val else "N/A"
+            return str(date_val)
+
+        rd = format_release(info.get("rd"), info.get("year"))
         album = info.get('album', 'N/A')
         label = info.get('label', 'N/A')
         artists = info.get('artists', [])
