@@ -177,10 +177,15 @@ if submitted:
             OPTIONAL MATCH (a)<-[:HAS_ARTIST]-(s:Song)
             WHERE s IS NOT NULL
             OPTIONAL MATCH (s)-[r:SAMPLES]->(t:Song)
+
             OPTIONAL MATCH (s)-[:HAS_ARTIST]->(sa:Artist)
             OPTIONAL MATCH (s)-[:BELONGS_TO_GENRE]->(sg:Genre)
+            OPTIONAL MATCH (s)-[:RELEASED_IN]->(sy:Year)
+
             OPTIONAL MATCH (t)-[:HAS_ARTIST]->(ta:Artist)
             OPTIONAL MATCH (t)-[:BELONGS_TO_GENRE]->(tg:Genre)
+            OPTIONAL MATCH (t)-[:RELEASED_IN]->(ty:Year)
+
             RETURN 
                 id(a) AS a_id, a.name AS a_name,
                 id(s) AS s_id, s.title AS s_name,
@@ -188,9 +193,11 @@ if submitted:
                 type(r) AS rel_type,
                 collect(DISTINCT sa.name) AS song_artists,
                 s.release_date AS s_release_date,
+                sy.value AS s_year,
                 collect(DISTINCT sg.name) AS s_genres,
                 collect(DISTINCT ta.name) AS t_artists,
                 t.release_date AS t_release_date,
+                ty.value AS t_year,
                 collect(DISTINCT tg.name) AS t_genres
             LIMIT 200
             """,
@@ -206,7 +213,12 @@ if submitted:
             if limit:
                 lst = lst[:limit]
             return ', '.join(str(x) for x in lst)
-
+        
+        def format_release(date_val, year_val):
+            if date_val == None or date_val == "None":
+                return str(year_val)
+            else:
+                return str(date_val)
 
         def safe_title(value):
             return value if value else "Untitled"
@@ -232,7 +244,7 @@ if submitted:
                         type="Song",
                         title=f"""Song: {safe_title(rec["s_name"])}
                                 Artist(s): {fmt_list(rec.get("song_artists"))}
-                                Release Date: {rec.get("s_release_date", "N/A")}
+                                Release Date: {format_release(rec.get("s_release_date"), rec.get("s_year"))}
                                 Genres: {fmt_list(rec.get("s_genres"), 3)}"""
                     )
                 G.add_edge(s_id, a_id, color="blue")
@@ -247,7 +259,7 @@ if submitted:
                         type="Song",
                         title=f"""Sampled Song: {safe_title(rec["t_name"])}
                                 Artist(s): {fmt_list(rec.get("t_artists"))}
-                                Release Date: {rec.get("t_release_date", "N/A")}
+                                Release Date: {format_release(rec.get("t_release_date"), rec.get("t_year"))}
                                 Genres: {fmt_list(rec.get("t_genres"), 3)}"""
                     )
                 G.add_edge(s_id, t_id, label=rec["rel_type"])
