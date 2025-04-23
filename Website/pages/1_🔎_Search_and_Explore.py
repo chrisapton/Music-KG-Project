@@ -275,19 +275,19 @@ if submitted:
         title = query
         # Basic song info
         try:
-            # Fix to get multiple artists
+            if artist_filter in ("None", ""):
+                artist_filter = None
+
             info = conn.query(
                 """
                 MATCH (s:Song {title:$title})
-                OPTIONAL MATCH (s)-[:HAS_ARTIST]->(a:Artist {name:$artist_filter})
+                OPTIONAL MATCH (s)-[:HAS_ARTIST]->(a:Artist)
                 OPTIONAL MATCH (s)-[:BELONGS_TO_GENRE]->(g:Genre)
                 OPTIONAL MATCH (s)-[:PART_OF_ALBUM]->(al:Album)
-                RETURN s.release_date AS rd,
-                       al.title AS album,
-                       s.record_label AS label,
-                       collect(DISTINCT a.name) AS artists,
-                       collect(DISTINCT g.name) AS genres,
-                       s.id AS song_id
+                WITH s, al, collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres,
+                    s.record_label AS label, s.release_date AS rd
+                WHERE $artist_filter IS NULL OR $artist_filter IN artists
+                RETURN rd, al.title AS album, label, artists, genres, s.id AS song_id
                 """,
                 {"title": title, "artist_filter": artist_filter}
             )[0]
