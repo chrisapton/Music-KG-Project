@@ -69,6 +69,21 @@ MATCH (a:Artist {name: row.artist_name})
 SET a.wikipedia_summary = row.wikipedia_summary;
 """
 
+pagerank_projection = """
+CALL gds.graph.project(
+  'songGraph',
+  'Song',
+  'SAMPLES'
+)
+"""
+
+pagerank_write = """
+CALL gds.pageRank.write('songGraph', {
+  writeProperty: 'pagerank'
+})
+YIELD nodePropertiesWritten, ranIterations
+"""
+
 with driver.session() as session:
     for constraint in constraints:
         session.run(constraint)
@@ -83,6 +98,11 @@ with driver.session() as session:
     print("✅ Genre import completed")
     session.run(summary_import)
     print("✅ Summary import completed")
+    session.run(pagerank_projection)
+    print("✅ Graph projected")
+    session.run(pagerank_write)
+    print("✅ PageRank scores written")
+
     print("✅ All imports completed")
 
 driver.close()
