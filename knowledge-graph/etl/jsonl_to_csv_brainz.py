@@ -79,7 +79,7 @@ def metadata_jsonl_to_csv(input_file, output_dates, output_genres, output_summar
     print(f"✅ CSV files saved: {output_dates}, {output_genres}, {output_summaries}")
 
 # Example usage
-metadata_jsonl_to_csv('../../scrapers/musicbrainz/musicbrainz_tracks_2023.jsonl',
-                      '../neo4j/data/import/musicbrainz_dates_2023.csv',
-                      '../neo4j/data/import/musicbrainz_genres_2023.csv',
-                      '../neo4j/data/import/musicbrainz_summaries_2023.csv', )
+metadata_jsonl_to_csv('../../scrapers/musicbrainz/musicbrainz_tracks_2024.jsonl',
+                      '../neo4j/data/import/musicbrainz_dates_2024.csv',
+                      '../neo4j/data/import/musicbrainz_genres_2024.csv',
+                      '../neo4j/data/import/musicbrainz_summaries_2024.csv', )
