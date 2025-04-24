@@ -14,20 +14,30 @@ st.set_page_config(page_title="Search & Explore", page_icon="🔍", layout="wide
 
 # ─────────────────────── sidebar ───────────────────────
 st.sidebar.header("Search Mode")
-search_type = st.sidebar.selectbox("Search Type", ["Artist", "Song"])
+sidebar_search_type = st.sidebar.selectbox("Search Type", ["Artist", "Song"])
 
 # ─────────────────────── main page ─────────────────────
 st.markdown("# 🔍 Search & Explore")
 
-with st.form("search_form"):
-    if search_type == "Artist":
-        query = st.text_input("Artist name")
-        artist_filter = None            # not used
-    else:
-        query = st.text_input("Song title")
-        artist_filter = st.text_input("Filter by artist (optional)")
+# Read query params from URL
+params = st.query_params
+url_search_type = params.get("search_type", sidebar_search_type)
+query = params.get("query", "")
+artist_filter = params.get("artist_filter", "")
+submitted = query != ""
 
-    submitted = st.form_submit_button("Search")
+
+with st.form("search_form"):
+    if url_search_type == "Artist":
+        query = st.text_input("Artist name", value=query)
+        artist_filter = None
+    else:
+        query = st.text_input("Song title", value=query)
+        artist_filter = st.text_input("Filter by artist (optional)", value=artist_filter)
+
+    clicked_submit = st.form_submit_button("Search")
+    if clicked_submit:
+        submitted = True  # override if user interacts manually
 
 if submitted:
     if not query:
@@ -36,7 +46,7 @@ if submitted:
         st.stop()
 
     # --- Artist Search -------------------------------------------------------
-    if search_type == "Artist":
+    if url_search_type == "Artist":
         artist = query
         try:
             artist_info = conn.query(

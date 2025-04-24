@@ -4,7 +4,7 @@ from neo4j_utils import Neo4jConnection
 
 # ─────────────────────── PAGE SETUP ───────────────────────
 st.set_page_config(page_title="PageRank Leaderboard", page_icon="🏆", layout="wide")
-st.title("🏆 Top 10 Most Influential Songs in This Network")
+st.title("🏆 Top 50 Most Influential Songs in This Network")
 
 # ─────────────────────── NEO4J QUERY ───────────────────────
 conn = Neo4jConnection("bolt://localhost:7687", "neo4j", "testpassword")
@@ -15,7 +15,7 @@ WHERE s.pagerank IS NOT NULL
 OPTIONAL MATCH (s)<-[:SAMPLES]-(:Song)
 WITH s, count(*) AS sampled_by
 ORDER BY s.pagerank DESC
-LIMIT 10
+LIMIT 50
 OPTIONAL MATCH (s)-[:HAS_ARTIST]->(a:Artist)
 RETURN s.title AS title,
        collect(DISTINCT a.name) AS artists,
