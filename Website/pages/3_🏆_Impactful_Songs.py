@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from neo4j_utils import Neo4jConnection
+import urllib.parse
 
 # ─────────────────────── PAGE SETUP ───────────────────────
 st.set_page_config(page_title="PageRank Leaderboard", page_icon="🏆", layout="wide")
@@ -30,13 +31,10 @@ conn.close()
 df = pd.DataFrame(results)
 df["Rank"] = range(1, len(df) + 1)
 df["artists"] = df["artists"].apply(lambda names: ", ".join(names) if names else "N/A")
-import urllib.parse
 
 df = df[["Rank", "title", "artists", "sampled_by", "pagerank"]]
 df.columns = ["Rank", "Song Title", "Artist(s)", "Sampled By", "PageRank Score"]
 
-# Convert song titles to clickable links
-import urllib.parse
 
 def make_clickable(title):
     query_params = urllib.parse.urlencode({
