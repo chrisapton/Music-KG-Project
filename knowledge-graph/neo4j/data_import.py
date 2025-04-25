@@ -143,6 +143,24 @@ CALL gds.pageRank.write('songGraph', {
 YIELD nodePropertiesWritten, ranIterations
 """
 
+community_graph = """
+CALL gds.graph.project(
+  'sampling_graph',
+  'Song',
+  {
+    SAMPLES: {
+      orientation: 'UNDIRECTED'
+    }
+  }
+)
+"""
+
+community_detection = """
+CALL gds.leiden.write('sampling_graph', {
+  writeProperty: 'sampling_community'
+})
+"""
+
 with driver.session() as session:
     for constraint in constraints:
         session.run(constraint)
@@ -163,6 +181,10 @@ with driver.session() as session:
     print("✅ Graph projected")
     session.run(pagerank_write)
     print("✅ PageRank scores written")
+    session.run(community_graph)
+    print("✅ Community graph projected")
+    session.run(community_detection)
+    print("✅ Community detection completed")
 
     print("✅ All imports completed")
 
