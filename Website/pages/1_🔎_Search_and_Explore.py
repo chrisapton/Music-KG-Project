@@ -441,50 +441,69 @@ if submitted:
             st.altair_chart(bar, use_container_width=True)
 
         # Graph Visualization
+        from pyvis.network import Network
+        import streamlit.components.v1 as components
+
+        # Slider to control depth
+        depth = st.slider("Sampling Depth", min_value=1, max_value=4, value=1)
+
+        # Query recursive sample relationships up to selected depth
         results = conn.query(
-            """
-            MATCH (s:Song {title:$title})-[r]-(m)
-            RETURN id(s) AS n_id, labels(s) AS n_labels, s,
-                   id(m) AS m_id, labels(m) AS m_labels, m,
-                   type(r) AS rel_type
-            LIMIT 50
+            f"""
+            MATCH (s:Song {{title:$title}})
+            CALL {{
+                WITH s
+                MATCH path = (s)-[:SAMPLES*1..{depth}]-(n)
+                RETURN DISTINCT relationships(path) AS rels
+            }}
+            UNWIND rels AS r
+            WITH DISTINCT r
+            RETURN 
+                id(startNode(r)) AS src_id,
+                startNode(r).title AS src_title,
+                id(endNode(r)) AS tgt_id,
+                endNode(r).title AS tgt_title,
+                type(r) AS rel_type
             """,
             {"title": title}
         )
-        COLOR_MAP = {
-            "Artist": "blue",
-            "Song": "green",
-            "SampledSong": "orange",
-        }
 
-        net = Network(height="500px", width="100%", notebook=False)
-        added = set()
+        net = Network(height="550px", width="100%", notebook=False, directed=True)
+        added_nodes = set()
+        added_edges = set()
+
         for rec in results:
-            nid = rec['n_id']
-            labs = rec['n_labels']
-            label = rec['s'].get('name', rec['s'].get('title', ''))
+            src_id = rec["src_id"]
+            tgt_id = rec["tgt_id"]
+            src_title = rec["src_title"]
+            tgt_title = rec["tgt_title"]
+            rel_type = rec["rel_type"]
 
-            if nid not in added:
-                node_type = labs[0] if labs else 'Unknown'
-                node_color = COLOR_MAP.get(node_type, "gray")
-                net.add_node(nid, label=label, title=node_type, color=node_color)
-                added.add(nid)
+            # Add nodes (green if it's the original query)
+            for nid, title_val in [(src_id, src_title), (tgt_id, tgt_title)]:
+                if nid not in added_nodes:
+                    color = "green" if title_val == title else "orange"
+                    net.add_node(nid, label=title_val, color=color, title="Song")
+                    added_nodes.add(nid)
 
-            mid = rec['m_id']
-            mlabs = rec['m_labels']
-            mlabel = rec['m'].get('name', rec['m'].get('title', ''))
+            # Add edge only once
+            edge_key = (src_id, tgt_id)
+            if rel_type == "SAMPLES" and edge_key not in added_edges:
+                net.add_edge(
+                    src_id,
+                    tgt_id,
+                    label="SAMPLES",
+                    arrows="to",
+                    color="orange",
+                    width=3,
+                    smooth=True
+                )
+                added_edges.add(edge_key)
 
-            if mid not in added:
-                node_type = mlabs[0] if mlabs else 'Unknown'
-                node_color = COLOR_MAP.get(node_type, "gray")
-                net.add_node(mid, label=mlabel, title=node_type, color=node_color)
-                added.add(mid)
 
-            net.add_edge(nid, mid, label=rec['rel_type'])
-
+        # Display
         net.save_graph("song_graph.html")
         with open("song_graph.html", "r") as f:
             components.html(f.read(), height=550, scrolling=True)
-
 
 conn.close()
