@@ -81,3 +81,63 @@ LOAD CSV WITH HEADERS FROM 'file:///musicbrainz_summaries_all.csv' AS row
 MATCH (a:Artist {name: row.artist_name})
 SET a.wikipedia_summary = row.wikipedia_summary;
 ```
+
+## Load Audio Features
+```cypher
+LOAD CSV WITH HEADERS FROM 'file:///acousticbrainz.csv' AS row
+MATCH (s:Song {id: row.whosampled_id})
+SET
+  s.danceability_danceable = toFloat(row.danceability_danceable),
+  s.genre_dortmund_alternative = toFloat(row.genre_dortmund_alternative),
+  s.genre_dortmund_blues = toFloat(row.genre_dortmund_blues),
+  s.genre_dortmund_electronic = toFloat(row.genre_dortmund_electronic),
+  s.genre_dortmund_folkcountry = toFloat(row.genre_dortmund_folkcountry),
+  s.genre_dortmund_funksoulrnb = toFloat(row.genre_dortmund_funksoulrnb),
+  s.genre_dortmund_jazz = toFloat(row.genre_dortmund_jazz),
+  s.genre_dortmund_pop = toFloat(row.genre_dortmund_pop),
+  s.genre_dortmund_raphiphop = toFloat(row.genre_dortmund_raphiphop),
+  s.genre_dortmund_rock = toFloat(row.genre_dortmund_rock),
+  s.genre_electronic_ambient = toFloat(row.genre_electronic_ambient),
+  s.genre_electronic_dnb = toFloat(row.genre_electronic_dnb),
+  s.genre_electronic_house = toFloat(row.genre_electronic_house),
+  s.genre_electronic_techno = toFloat(row.genre_electronic_techno),
+  s.genre_electronic_trance = toFloat(row.genre_electronic_trance),
+  s.genre_rosamerica_cla = toFloat(row.genre_rosamerica_cla),
+  s.genre_rosamerica_dan = toFloat(row.genre_rosamerica_dan),
+  s.genre_rosamerica_hip = toFloat(row.genre_rosamerica_hip),
+  s.genre_rosamerica_jaz = toFloat(row.genre_rosamerica_jaz),
+  s.genre_rosamerica_pop = toFloat(row.genre_rosamerica_pop),
+  s.genre_rosamerica_rhy = toFloat(row.genre_rosamerica_rhy),
+  s.genre_rosamerica_roc = toFloat(row.genre_rosamerica_roc),
+  s.genre_rosamerica_spe = toFloat(row.genre_rosamerica_spe),
+  s.genre_tzanetakis_blu = toFloat(row.genre_tzanetakis_blu),
+  s.genre_tzanetakis_cla = toFloat(row.genre_tzanetakis_cla),
+  s.genre_tzanetakis_cou = toFloat(row.genre_tzanetakis_cou),
+  s.genre_tzanetakis_dis = toFloat(row.genre_tzanetakis_dis),
+  s.genre_tzanetakis_hip = toFloat(row.genre_tzanetakis_hip),
+  s.genre_tzanetakis_jaz = toFloat(row.genre_tzanetakis_jaz),
+  s.genre_tzanetakis_met = toFloat(row.genre_tzanetakis_met),
+  s.genre_tzanetakis_pop = toFloat(row.genre_tzanetakis_pop),
+  s.genre_tzanetakis_reg = toFloat(row.genre_tzanetakis_reg),
+  s.genre_tzanetakis_roc = toFloat(row.genre_tzanetakis_roc),
+  s.ismir04_rhythm_ChaChaCha = toFloat(row.ismir04_rhythm_ChaChaCha),
+  s.ismir04_rhythm_Jive = toFloat(row.ismir04_rhythm_Jive),
+  s.ismir04_rhythm_Quickstep = toFloat(row.ismir04_rhythm_Quickstep),
+  s.ismir04_rhythm_Rumba_American = toFloat(row.`ismir04_rhythm_Rumba-American`),
+  s.ismir04_rhythm_Rumba_International = toFloat(row.`ismir04_rhythm_Rumba-International`),
+  s.ismir04_rhythm_Rumba_Misc = toFloat(row.`ismir04_rhythm_Rumba-Misc`),
+  s.ismir04_rhythm_Samba = toFloat(row.ismir04_rhythm_Samba),
+  s.ismir04_rhythm_Tango = toFloat(row.ismir04_rhythm_Tango),
+  s.ismir04_rhythm_VienneseWaltz = toFloat(row.ismir04_rhythm_VienneseWaltz),
+  s.ismir04_rhythm_Waltz = toFloat(row.ismir04_rhythm_Waltz),
+  s.mood_acoustic_acoustic = toFloat(row.mood_acoustic_acoustic),
+  s.mood_aggressive_aggressive = toFloat(row.mood_aggressive_aggressive),
+  s.mood_electronic_electronic = toFloat(row.mood_electronic_electronic),
+  s.mood_happy_happy = toFloat(row.mood_happy_happy),
+  s.mood_party = toFloat(row.mood_party_party),
+  s.mood_relaxed = toFloat(row.mood_relaxed_relaxed),
+  s.mood_sad = toFloat(row.mood_sad_sad),
+  s.timbre_bright = toFloat(row.timbre_bright),
+  s.tonal_atonal_atonal = toFloat(row.tonal_atonal_tonal),
+  s.voice_instrumental_voice = toFloat(row.voice_instrumental_voice);
+```
