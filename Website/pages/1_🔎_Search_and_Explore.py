@@ -456,9 +456,16 @@ if st.session_state.submitted:
         )
 
         # Query recursive sample relationships up to selected depth
+
+        artist_filter = " OR ".join([f'"{artist}" IN matched_artists' for artist in artists]) if artists else ""
+
         results = conn.query(
             f"""
             MATCH (s:Song {{title:$title}})
+            OPTIONAL MATCH (s)-[:HAS_ARTIST]->(a:Artist)
+            WITH s, collect(DISTINCT a.name) AS matched_artists
+            WHERE {"TRUE" if not artists else artist_filter}
+
             CALL {{
                 WITH s
                 MATCH path = (s)-[:SAMPLES*1..{depth}]-(n)
@@ -482,6 +489,46 @@ if st.session_state.submitted:
             {"title": title}
         )
 
+
+
+        # STEP 1: Build graph for BFS
+        G = nx.DiGraph()
+        for rec in results:
+            G.add_edge(rec["src_id"], rec["tgt_id"])
+
+        # Find the root node (starting title)
+        root_id = None
+        for rec in results:
+            if rec["src_title"] == title:
+                root_id = rec["src_id"]
+                break
+
+        # STEP 2: Compute node depths using BFS
+        depths = {node: float("inf") for node in G.nodes}
+        if root_id is not None:
+            depths[root_id] = 0
+            queue = [root_id]
+            while queue:
+                current = queue.pop(0)
+                for neighbor in list(G.successors(current)) + list(G.predecessors(current)):
+                    if depths[neighbor] > depths[current] + 1:
+                        depths[neighbor] = depths[current] + 1
+                        queue.append(neighbor)
+
+
+        # STEP 3: Color function
+        import math
+
+        def get_color_by_depth(depth):
+            colors = ["#1f77b4", "#2ca02c", "#ff7f0e", "#d62728", "#9467bd"]
+            if depth is None or math.isinf(depth):
+                return "#808080"  # Gray for unreachable nodes
+            return colors[int(depth) % len(colors)]
+
+
+        # STEP 4: Create pyvis network
+        from pyvis.network import Network
+
         net = Network(height="550px", width="100%", notebook=False, directed=True)
         added_nodes = set()
         added_edges = set()
@@ -500,26 +547,23 @@ if st.session_state.submitted:
                 (tgt_id, tgt_title, tgt_artists)
             ]:
                 if nid not in added_nodes:
-                    color = "blue" if title_val == title else "orange"
-                    tooltip = f"Song: {title_val}\nArtist(s): {artist_str}"
+                    depth = depths.get(nid, 0)
+                    color = "blue" if title_val == title else get_color_by_depth(depth)
+                    tooltip = f"Song: {title_val}\nArtist(s): {artist_str}\nDepth: {depth}"
                     net.add_node(nid, label=title_val, color=color, title=tooltip)
                     added_nodes.add(nid)
 
-
-            # Add edge only once
             edge_key = (src_id, tgt_id)
             if rel_type == "SAMPLES" and edge_key not in added_edges:
                 net.add_edge(
                     src_id,
                     tgt_id,
-                    label="SAMPLES",
                     arrows="to",
-                    color="orange",
-                    width=3,
+                    color="black",
+                    width=2,
                     smooth=True
                 )
                 added_edges.add(edge_key)
-
 
         # Display
         net.save_graph("song_graph.html")
