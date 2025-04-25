@@ -103,14 +103,14 @@ def get_community_edges(community: int, limit: int = 200):
 
 
 # ─────────────────────── COMMUNITY NETWORK ───────────────────────
-st.subheader("🕸️ Sampling Network Within Community")
+st.subheader("Sampling Network Within Community")
 
 edge_df = get_community_edges(selected_community)
 
 if edge_df.empty:
     st.info("No edges found in this community.")
 else:
-    net = Network(height="600px", width="100%", notebook=False)
+    net = Network(height="600px", width="100%", directed=True, notebook=True)
     for i, row in edge_df.iterrows():
         source = str(row["source"]) if pd.notnull(row["source"]) else None
         target = str(row["target"]) if pd.notnull(row["target"]) else None
