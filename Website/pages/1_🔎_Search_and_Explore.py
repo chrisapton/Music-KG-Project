@@ -497,11 +497,17 @@ if st.session_state.submitted:
             G.add_edge(rec["src_id"], rec["tgt_id"])
 
         # Find the root node (starting title)
+        title_clean = title.strip().lower()
         root_id = None
+
         for rec in results:
-            if rec["src_title"] == title:
+            if rec["src_title"] and rec["src_title"].strip().lower() == title_clean:
                 root_id = rec["src_id"]
                 break
+            elif rec["tgt_title"] and rec["tgt_title"].strip().lower() == title_clean:
+                root_id = rec["tgt_id"]
+                break
+
 
         # STEP 2: Compute node depths using BFS
         depths = {node: float("inf") for node in G.nodes}
