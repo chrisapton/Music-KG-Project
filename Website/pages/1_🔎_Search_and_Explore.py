@@ -24,8 +24,8 @@ params = st.query_params
 url_search_type = params.get("search_type", sidebar_search_type)
 query = params.get("query", "")
 artist_filter = params.get("artist_filter", "")
-submitted = query != ""
-
+if "submitted" not in st.session_state:
+    st.session_state.submitted = query != ""
 
 with st.form("search_form"):
     if url_search_type == "Artist":
@@ -37,9 +37,12 @@ with st.form("search_form"):
 
     clicked_submit = st.form_submit_button("Search")
     if clicked_submit:
-        submitted = True  # override if user interacts manually
+        st.session_state.submitted = True
+        st.session_state.query = query
+        st.session_state.artist_filter = artist_filter
 
-if submitted:
+
+if st.session_state.submitted:
     if not query:
         st.error("Please enter a search query.")
         conn.close()
@@ -440,12 +443,17 @@ if submitted:
 
             st.altair_chart(bar, use_container_width=True)
 
-        # Graph Visualization
-        from pyvis.network import Network
-        import streamlit.components.v1 as components
 
-        # Slider to control depth
-        depth = st.slider("Sampling Depth", min_value=1, max_value=4, value=1)
+        if "depth" not in st.session_state:
+            st.session_state.depth = 1
+
+        depth = st.slider(
+            "Sampling Depth",
+            min_value=1,
+            max_value=4,
+            value=st.session_state.depth,
+            key="depth_slider"
+        )
 
         # Query recursive sample relationships up to selected depth
         results = conn.query(
