@@ -21,7 +21,7 @@ OPTIONAL MATCH (s)-[:HAS_ARTIST]->(a:Artist)
 RETURN s.title AS title,
        collect(DISTINCT a.name) AS artists,
        sampled_by,
-       round(s.pagerank, 5) AS pagerank
+       round(s.pagerank, 2) AS pagerank
 """
 
 results = conn.query(query)
