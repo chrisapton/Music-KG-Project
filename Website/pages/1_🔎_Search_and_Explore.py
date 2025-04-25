@@ -355,7 +355,7 @@ if submitted:
             """,
             {"song_id": song_id}
         )[0]["pr"]
-        pagerank_score = round(pagerank_score, 5) if pagerank_score is not None else "N/A"
+        pagerank_score = round(pagerank_score, 2) if pagerank_score is not None else "N/A"
 
         st.markdown("**🧬 Sampling Stats:**")
         st.write(f"- Sampled {outgoing} other songs")
