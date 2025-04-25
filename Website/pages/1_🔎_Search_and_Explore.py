@@ -24,8 +24,8 @@ params = st.query_params
 url_search_type = params.get("search_type", sidebar_search_type)
 query = params.get("query", "")
 artist_filter = params.get("artist_filter", "")
-submitted = query != ""
-
+if "submitted" not in st.session_state:
+    st.session_state.submitted = query != ""
 
 with st.form("search_form"):
     if url_search_type == "Artist":
@@ -37,9 +37,12 @@ with st.form("search_form"):
 
     clicked_submit = st.form_submit_button("Search")
     if clicked_submit:
-        submitted = True  # override if user interacts manually
+        st.session_state.submitted = True
+        st.session_state.query = query
+        st.session_state.artist_filter = artist_filter
 
-if submitted:
+
+if st.session_state.submitted:
     if not query:
         st.error("Please enter a search query.")
         conn.close()
@@ -440,12 +443,17 @@ if submitted:
 
             st.altair_chart(bar, use_container_width=True)
 
-        # Graph Visualization
-        from pyvis.network import Network
-        import streamlit.components.v1 as components
 
-        # Slider to control depth
-        depth = st.slider("Sampling Depth", min_value=1, max_value=4, value=1)
+        if "depth" not in st.session_state:
+            st.session_state.depth = 1
+
+        depth = st.slider(
+            "Sampling Depth",
+            min_value=1,
+            max_value=4,
+            value=st.session_state.depth,
+            key="depth_slider"
+        )
 
         # Query recursive sample relationships up to selected depth
         results = conn.query(
@@ -457,12 +465,18 @@ if submitted:
                 RETURN DISTINCT relationships(path) AS rels
             }}
             UNWIND rels AS r
-            WITH DISTINCT r
+            WITH DISTINCT r,
+                startNode(r) AS src,
+                endNode(r) AS tgt
+            OPTIONAL MATCH (src)-[:HAS_ARTIST]->(a1:Artist)
+            OPTIONAL MATCH (tgt)-[:HAS_ARTIST]->(a2:Artist)
             RETURN 
-                id(startNode(r)) AS src_id,
-                startNode(r).title AS src_title,
-                id(endNode(r)) AS tgt_id,
-                endNode(r).title AS tgt_title,
+                id(src) AS src_id,
+                src.title AS src_title,
+                collect(DISTINCT a1.name) AS src_artists,
+                id(tgt) AS tgt_id,
+                tgt.title AS tgt_title,
+                collect(DISTINCT a2.name) AS tgt_artists,
                 type(r) AS rel_type
             """,
             {"title": title}
@@ -477,14 +491,20 @@ if submitted:
             tgt_id = rec["tgt_id"]
             src_title = rec["src_title"]
             tgt_title = rec["tgt_title"]
+            src_artists = ", ".join(rec["src_artists"]) if rec["src_artists"] else "Unknown"
+            tgt_artists = ", ".join(rec["tgt_artists"]) if rec["tgt_artists"] else "Unknown"
             rel_type = rec["rel_type"]
 
-            # Add nodes (green if it's the original query)
-            for nid, title_val in [(src_id, src_title), (tgt_id, tgt_title)]:
+            for nid, title_val, artist_str in [
+                (src_id, src_title, src_artists),
+                (tgt_id, tgt_title, tgt_artists)
+            ]:
                 if nid not in added_nodes:
-                    color = "green" if title_val == title else "orange"
-                    net.add_node(nid, label=title_val, color=color, title="Song")
+                    color = "blue" if title_val == title else "orange"
+                    tooltip = f"Song: {title_val}\nArtist(s): {artist_str}"
+                    net.add_node(nid, label=title_val, color=color, title=tooltip)
                     added_nodes.add(nid)
+
 
             # Add edge only once
             edge_key = (src_id, tgt_id)
