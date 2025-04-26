@@ -6,6 +6,7 @@ from pyvis.network import Network
 import networkx as nx
 import streamlit.components.v1 as components
 from neo4j_utils import Neo4jConnection
+import math
 
 # Neo4j connection
 conn = Neo4jConnection("bolt://localhost:7687", "neo4j", "testpassword")
@@ -277,11 +278,11 @@ if st.session_state.submitted:
                     )
                 G.add_edge(s_id, t_id, label=rec["rel_type"])
 
-        nt = Network(height="700px", width="100%", directed=True)
+        nt = Network(height="690px", width="100%", directed=True)
         nt.from_nx(G)
         nt.set_options("""var options={ "physics":{ "solver":"forceAtlas2Based" } }""")
         html = nt.generate_html()
-        components.html(html, height=700, scrolling=True)
+        components.html(html, height=700)
 
     else:
         # --- Song Search -------------------------------------------------------
@@ -322,6 +323,7 @@ if st.session_state.submitted:
         genres = info.get('genres', [])
         song_id = info.get('song_id', None)
 
+        st.subheader("Song Details")
         st.markdown(f"**Song:** {title}")
         st.markdown(f"**Artist(s):** {', '.join(artists)}")
         st.markdown(f"**Album:** {album}")
@@ -358,7 +360,7 @@ if st.session_state.submitted:
             """,
             {"song_id": song_id}
         )[0]["pr"]
-        pagerank_score = round(pagerank_score, 5) if pagerank_score is not None else "N/A"
+        pagerank_score = round(pagerank_score, 2) if pagerank_score is not None else "N/A"
 
         st.markdown("**🧬 Sampling Stats:**")
         st.write(f"- Sampled {outgoing} other songs")
@@ -443,12 +445,12 @@ if st.session_state.submitted:
 
             st.altair_chart(bar, use_container_width=True)
 
-
+        st.subheader("Sampling Network")
         if "depth" not in st.session_state:
             st.session_state.depth = 1
 
         depth = st.slider(
-            "Sampling Depth",
+            "Sampling Depth Slider",
             min_value=1,
             max_value=4,
             value=st.session_state.depth,
@@ -489,8 +491,6 @@ if st.session_state.submitted:
             {"title": title}
         )
 
-
-
         # STEP 1: Build graph for BFS
         G = nx.DiGraph()
         for rec in results:
@@ -508,7 +508,6 @@ if st.session_state.submitted:
                 root_id = rec["tgt_id"]
                 break
 
-
         # STEP 2: Compute node depths using BFS
         depths = {node: float("inf") for node in G.nodes}
         if root_id is not None:
@@ -522,9 +521,6 @@ if st.session_state.submitted:
                         queue.append(neighbor)
 
 
-        # STEP 3: Color function
-        import math
-
         def get_color_by_depth(depth):
             colors = ["#1f77b4", "#2ca02c", "#ff7f0e", "#d62728", "#9467bd"]
             if depth is None or math.isinf(depth):
@@ -532,10 +528,7 @@ if st.session_state.submitted:
             return colors[int(depth) % len(colors)]
 
 
-        # STEP 4: Create pyvis network
-        from pyvis.network import Network
-
-        net = Network(height="550px", width="100%", notebook=False, directed=True)
+        net = Network(height="590px", width="100%", notebook=False, directed=True)
         added_nodes = set()
         added_edges = set()
 
@@ -574,6 +567,6 @@ if st.session_state.submitted:
         # Display
         net.save_graph("song_graph.html")
         with open("song_graph.html", "r") as f:
-            components.html(f.read(), height=550, scrolling=True)
+            components.html(f.read(), height=600)
 
 conn.close()
