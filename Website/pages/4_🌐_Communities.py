@@ -20,7 +20,9 @@ conn = get_conn()
 def get_community_list():
     query = """
     MATCH (s:Song)
-    RETURN s.sampling_community AS community, count(*) AS size
+    WITH s.sampling_community AS community, count(*) AS size
+    WHERE size > 50
+    RETURN community, size
     ORDER BY size DESC
     """
     return conn.query(query)
@@ -110,7 +112,7 @@ edge_df = get_community_edges(selected_community)
 if edge_df.empty:
     st.info("No edges found in this community.")
 else:
-    net = Network(height="600px", width="100%", directed=True, notebook=True)
+    net = Network(height="600px", width="100%", directed=True, notebook=False)
     for i, row in edge_df.iterrows():
         source = str(row["source"]) if pd.notnull(row["source"]) else None
         target = str(row["target"]) if pd.notnull(row["target"]) else None
