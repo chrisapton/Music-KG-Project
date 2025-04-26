@@ -165,6 +165,8 @@ with driver.session() as session:
     for constraint in constraints:
         session.run(constraint)
     print("✅ Constraints created")
+    session.run("CALL gds.graph.drop('songGraph', false) YIELD graphName")
+
     session.run(track_import)
     print("✅ Track import completed")
     session.run(relationship_import)
