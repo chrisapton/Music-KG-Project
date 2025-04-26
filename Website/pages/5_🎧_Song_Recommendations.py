@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
 from neo4j_utils import Neo4jConnection
 
 # ─────────────────────── PAGE SETUP ───────────────────────
@@ -7,14 +9,41 @@ st.set_page_config(page_title="🎧 Song Recommendations", page_icon="🎧", lay
 st.title("🎧 Song Recommendations from Sampling Patterns")
 st.sidebar.header("Recommendation Settings")
 
-# ─────────────────────── CONNECT ───────────────────────
+# ─────────────────────── CONNECT TO NEO4J ───────────────────────
 @st.cache_resource
 def get_conn():
     return Neo4jConnection("bolt://localhost:7687", "neo4j", "testpassword")
 
 conn = get_conn()
 
-# ─────────────────────── GET SONG LIST ───────────────────────
+# ─────────────────────── CONNECT TO SPOTIFY ───────────────────────
+@st.cache_resource
+def get_spotify_client():
+    client_id = st.secrets["SPOTIFY_CLIENT_ID"]
+    client_secret = st.secrets["SPOTIFY_CLIENT_SECRET"]
+    auth_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
+    return spotipy.Spotify(auth_manager=auth_manager)
+
+sp = get_spotify_client()
+
+# ─────────────────────── FUNCTION TO GET SPOTIFY POPULARITY ───────────────────────
+@st.cache_data(show_spinner="Fetching Spotify popularity...")
+def get_spotify_popularity(song_title, artist_name=None):
+    try:
+        query = f"track:{song_title}"
+        if artist_name:
+            query += f" artist:{artist_name}"
+
+        result = sp.search(q=query, type="track", limit=1)
+        items = result.get("tracks", {}).get("items", [])
+        if items:
+            return items[0]["popularity"]
+    except Exception as e:
+        st.error(f"Spotify API error: {e}")
+    
+    return 0  # Default if not found
+
+# ─────────────────────── GET ALL SONGS ───────────────────────
 @st.cache_data
 def get_all_songs():
     query = "MATCH (s:Song) RETURN DISTINCT s.title AS title ORDER BY s.title"
@@ -37,9 +66,7 @@ def get_recommendations(title):
     OPTIONAL MATCH (rec)-[:HAS_ARTIST]->(a:Artist)
     RETURN rec.title AS recommended_title,
            collect(DISTINCT a.name) AS artists,
-           sampled.title AS sampled_source,
-           rec.spotify_popularity AS popularity
-    ORDER BY popularity DESC
+           sampled.title AS sampled_source
     LIMIT 15
     """
     return conn.query(query, {"title": title})
@@ -52,18 +79,25 @@ if df.empty:
     st.warning("No recommendations found. This song may not have any sampling connections.")
 else:
     df["artists"] = df["artists"].apply(lambda a: ", ".join(a) if a else "Unknown")
-    df["popularity"] = df["popularity"].fillna(0).astype(int)
+
+    # Fetch live Spotify popularity
+    df["Spotify Popularity"] = df.apply(
+        lambda row: get_spotify_popularity(row["recommended_title"], row["artists"].split(",")[0] if row["artists"] else None),
+        axis=1
+    )
+
     df = df.rename(columns={
         "recommended_title": "Recommended Song",
         "artists": "Artists",
-        "sampled_source": "Shared Sample",
-        "popularity": "Spotify Popularity"
+        "sampled_source": "Shared Sample"
     })
 
-    st.subheader(f"Songs that also sampled what **{selected_song}** did")
+    df = df.sort_values("Spotify Popularity", ascending=False)
+
+    st.subheader(f"Songs that sampled the same tracks as **{selected_song}**")
     st.dataframe(df, use_container_width=True)
 
-# ─────────────────────── OPTIONAL: SHOW PATH GRAPH ───────────────────────
+# ─────────────────────── OPTIONAL: SHOW SAMPLING GRAPH ───────────────────────
 with st.expander("🔗 Show sampling graph (co-samplers)"):
     import networkx as nx
     import matplotlib.pyplot as plt
