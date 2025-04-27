@@ -3,6 +3,8 @@ import pandas as pd
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from neo4j_utils import Neo4jConnection
+import networkx as nx
+import matplotlib.pyplot as plt
 
 # ─────────────────────── PAGE SETUP ───────────────────────
 st.set_page_config(page_title="🎧 Song Recommendations", page_icon="🎧", layout="wide")
@@ -107,11 +109,8 @@ else:
     st.subheader(f"Songs that sampled the same tracks as **{selected_song}**")
     st.dataframe(df, use_container_width=True)
 
-# ─────────────────────── OPTIONAL: SHOW SAMPLING GRAPH ───────────────────────
-with st.expander("🔗 Show sampling graph (co-samplers)"):
-    import networkx as nx
-    import matplotlib.pyplot as plt
 
+with st.expander("🔗 Show sampling graph (co-samplers)"):
     G = nx.DiGraph()
     G.add_node(selected_song, color="blue")
 

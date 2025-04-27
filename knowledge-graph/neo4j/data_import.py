@@ -161,6 +161,15 @@ CALL gds.leiden.write('sampling_graph', {
 })
 """
 
+node2vec_projection = """
+CALL gds.node2vec.write('songGraph', {
+  embeddingDimension:128,
+  iterations:10,
+  walkLength:80,
+  writeProperty:'n2v'
+});
+"""
+
 with driver.session() as session:
     for constraint in constraints:
         session.run(constraint)
@@ -185,6 +194,8 @@ with driver.session() as session:
     print("✅ Community graph projected")
     session.run(community_detection)
     print("✅ Community detection completed")
+    session.run(node2vec_projection)
+    print("✅ Node2Vec embeddings written")
 
     print("✅ All imports completed")
 
