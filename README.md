@@ -26,7 +26,7 @@ Make sure Docker is installed before running this.
 
 ## 2. Injecting Data into Neo4j
 
-Once Neo4j is running, from the root project directory:
+Once Neo4j is running, from the knowledge-graph/neo4j directory:
 
 ```bash
 python load_data.py
