@@ -10,6 +10,7 @@ services:
     environment:
       - NEO4J_AUTH=neo4j/testpassword
       - NEO4J_PLUGINS=["apoc", "bloom", "graph-data-science"]
+      - NEO4J_apoc_export_file_enabled=true
     volumes:
       - ./data/data:/data
 #      - ./data/neo4j/logs:/logs
