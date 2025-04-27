@@ -13,7 +13,7 @@ Navigate to the `KnowledgeGraph/neo4j` directory and run:
 
 ```bash
 cd KnowledgeGraph/neo4j
-docker-compose up -d
+docker compose up -d
 ```
 
 - This will start Neo4j using the `docker-compose.yml` provided.
