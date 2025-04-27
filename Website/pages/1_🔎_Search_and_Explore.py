@@ -291,6 +291,8 @@ if st.session_state.submitted:
         try:
             if artist_filter in ("None", ""):
                 artist_filter = None
+            
+            artist_filters = [artist.strip() for artist in artist_filter.split(",")] if artist_filter else None
 
             info = conn.query(
                 """
@@ -301,10 +303,10 @@ if st.session_state.submitted:
                 OPTIONAL MATCH (s)-[:RELEASED_IN]->(y:Year)
                 WITH s, al, collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres,
                     s.record_label AS label, s.release_date AS rd, y.value AS year
-                WHERE $artist_filter IS NULL OR $artist_filter IN artists
+                WHERE $artist_filters IS NULL OR ANY(artist IN $artist_filters WHERE artist IN artists)
                 RETURN rd, year, al.title AS album, label, artists, genres, s.id AS song_id
                 """,
-                {"title": title, "artist_filter": artist_filter}
+                {"title": title, "artist_filters": artist_filters}
             )[0]
         except (IndexError, KeyError):
             st.error(f"Song '{title}' not found.")
@@ -459,14 +461,15 @@ if st.session_state.submitted:
 
         # Query recursive sample relationships up to selected depth
 
-        artist_filter = " OR ".join([f'"{artist}" IN matched_artists' for artist in artists]) if artists else ""
+        artist_filters = artists if artists else None  # artists = info.get('artists', [])
+
 
         results = conn.query(
             f"""
             MATCH (s:Song {{title:$title}})
             OPTIONAL MATCH (s)-[:HAS_ARTIST]->(a:Artist)
             WITH s, collect(DISTINCT a.name) AS matched_artists
-            WHERE {"TRUE" if not artists else artist_filter}
+            WHERE $artist_filters IS NULL OR ALL(artist IN $artist_filters WHERE artist IN matched_artists)
 
             CALL {{
                 WITH s
@@ -488,8 +491,9 @@ if st.session_state.submitted:
                 collect(DISTINCT a2.name) AS tgt_artists,
                 type(r) AS rel_type
             """,
-            {"title": title}
+            {"title": title, "artist_filters": artist_filters}
         )
+
 
         # STEP 1: Build graph for BFS
         G = nx.DiGraph()

@@ -31,7 +31,7 @@ sp = get_spotify_client()
 def get_spotify_popularity(song_title, artist_name=None):
     try:
         query = f"track:{song_title}"
-        if artist_name:
+        if artist_name and artist_name != "Unknown":
             query += f" artist:{artist_name}"
 
         result = sp.search(q=query, type="track", limit=1)
@@ -55,6 +55,12 @@ selected_song = st.selectbox("Select a song to base recommendations on", song_li
 if not selected_song:
     st.stop()
 
+# ─────────────────────── GET SELECTED SONG POPULARITY ───────────────────────
+selected_song_popularity = get_spotify_popularity(selected_song)
+
+st.markdown(f"**Selected Song Spotify Popularity**: 🎵 **{selected_song_popularity}** / 100")
+
+
 # ─────────────────────── GET RECOMMENDATIONS ───────────────────────
 @st.cache_data(show_spinner="Fetching recommendations...")
 def get_recommendations(title):
@@ -64,21 +70,24 @@ def get_recommendations(title):
     MATCH (rec:Song)-[:SAMPLES]->(sampled)
     WHERE rec.title <> $title
     OPTIONAL MATCH (rec)-[:HAS_ARTIST]->(a:Artist)
+    OPTIONAL MATCH (sampled)-[:HAS_ARTIST]->(sampled_artist:Artist)
     RETURN rec.title AS recommended_title,
            collect(DISTINCT a.name) AS artists,
-           sampled.title AS sampled_source
+           sampled.title AS sampled_source,
+           collect(DISTINCT sampled_artist.name) AS sampled_artists
     LIMIT 15
     """
     return conn.query(query, {"title": title})
 
+# ─────────────────────── FETCH AND DISPLAY ───────────────────────
 recs = get_recommendations(selected_song)
 df = pd.DataFrame(recs)
 
-# ─────────────────────── DISPLAY RECOMMENDATIONS ───────────────────────
 if df.empty:
     st.warning("No recommendations found. This song may not have any sampling connections.")
 else:
     df["artists"] = df["artists"].apply(lambda a: ", ".join(a) if a else "Unknown")
+    df["sampled_artists"] = df["sampled_artists"].apply(lambda a: ", ".join(a) if a else "Unknown")
 
     # Fetch live Spotify popularity
     df["Spotify Popularity"] = df.apply(
@@ -89,7 +98,8 @@ else:
     df = df.rename(columns={
         "recommended_title": "Recommended Song",
         "artists": "Artists",
-        "sampled_source": "Shared Sample"
+        "sampled_source": "Shared Sample",
+        "sampled_artists": "Shared Sample Artist(s)"
     })
 
     df = df.sort_values("Spotify Popularity", ascending=False)
