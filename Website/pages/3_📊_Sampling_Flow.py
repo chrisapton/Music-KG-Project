@@ -26,17 +26,15 @@ def load_sampling_data():
     """
     return get_conn().query(query)
 
+
 conn = get_conn()
 data = load_sampling_data()
 
 df = pd.DataFrame(data)
-
-# ─────────────────────── EMPTY DATA CASE ───────────────────────
 if df.empty:
     st.warning("No sampling data found.")
     st.stop()
 
-# ─────────────────────── SIDEBAR FILTERS ───────────────────────
 top_n = st.sidebar.slider("Max number of flows to display", 5, 100, 25)
 df = df.sort_values("count", ascending=False).head(top_n)
 
@@ -76,7 +74,6 @@ else:
     selected_node = st.sidebar.selectbox("Select Target Genre", sorted(df_grouped["target_genre"].unique()))
     highlighted = (df_grouped["target_genre"] == selected_node)
 
-# Use Plotly default color for highlight
 highlight_color = px.colors.qualitative.Plotly[0]
 colors = [highlight_color if h else "rgba(200,200,200,0.2)" for h in highlighted]
 

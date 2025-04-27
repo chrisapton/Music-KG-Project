@@ -1,4 +1,6 @@
-import streamlit as st, pandas as pd, numpy as np
+import streamlit as st
+import pandas as pd
+import numpy as np
 from scipy.spatial.distance import cdist
 from neo4j_utils import Neo4jConnection
 from scipy.spatial.distance import cdist
@@ -48,7 +50,7 @@ FEATURE_COLS = [
     "voice_instrumental_voice"
 ]
 
-# ──────────────── 1.  Stem picker ─────────────
+# Sample selector
 stem_query = st.text_input("Search a sample (song title / artist):")
 if stem_query:
     raw_hits = conn.query("""
@@ -72,8 +74,6 @@ LIMIT 20
         st.stop()
 
     artist_str = lambda a: ", ".join(a) if isinstance(a, (list, tuple)) else str(a)
-
-    # build label → row map
     options = {
         f"{r.title} – {artist_str(r.artist)} ({r.year})": r
         for r in df_hits.itertuples()
@@ -86,7 +86,7 @@ LIMIT 20
         stem_id = int(stem_row.id)
         stem_year = int(stem_row.year)
 
-        # ───────────── 2.  Random walks in Neo4j ─────────────
+        # random walks
         walks = conn.query("""
           CALL gds.randomWalk.stream(
               'songGraph',
@@ -104,7 +104,7 @@ LIMIT 20
         walk_df = pd.DataFrame(walks)
         walk_df["walk_prob"] = walk_df.hits / walk_df.hits.sum()
 
-        # ───────────── 3.  Pull audio vectors & metadata ──────────
+        # Pull audio features and metadata
         cand_ids = walk_df.id.tolist()
         feature_props = ",\n       ".join([f"t.{c} AS {c}" for c in FEATURE_COLS])
 
@@ -125,27 +125,26 @@ LIMIT 20
             st.warning("Candidates returned 0 rows.")
             st.stop()
 
-        # --- structural similarity (Node2Vec) ---
+        # structural similarity (Node2Vec)
         struct_mat = np.stack(meta_df.vec_struct.apply(lambda v: np.array(v, np.float32)))
         stem_struct = np.array(conn.query(
             "MATCH (s) WHERE id(s)=$id RETURN s.n2v AS v",
             {"id": stem_id})[0]["v"], np.float32).reshape(1, -1)
         meta_df["struct_cos"] = 1 - cdist(stem_struct, struct_mat, "cosine").flatten()
 
-        # --- audio similarity (scalar features) ---
+        # audio similarity (scalar features)
         audio_df = meta_df[FEATURE_COLS].astype(float)
         if audio_df.isna().all().all():
             meta_df["audio_cos"] = 0.0
             st.info("⚠️  No scalar audio features present; using graph signals only.")
         else:
-            audio_mat = audio_df.to_numpy(dtype=np.float32)  # shape (N, k)
-            col_mean = audio_mat.mean(axis=0, keepdims=True)  # 1 × k
+            audio_mat = audio_df.to_numpy(dtype=np.float32)
+            col_mean = audio_mat.mean(axis=0, keepdims=True)
             col_std = audio_mat.std(axis=0, ddof=0, keepdims=True)
             col_std[col_std == 0] = 1  # avoid /0
 
             audio_mat_std = (audio_mat - col_mean) / col_std
 
-            # ── stem vector (query from DB if not in candidates) ──
             stem_audio = conn.query(f"""
                 MATCH (s:Song) WHERE id(s)=$id
                 RETURN {', '.join(f's.{c} AS {c}' for c in FEATURE_COLS)}
@@ -157,11 +156,11 @@ LIMIT 20
 
             meta_df["audio_cos"] = audio_cos
 
-        # ───────────── 4.  Score & display recommendations ───────────
+
         df = meta_df.merge(walk_df[["id", "walk_prob"]], how="inner")
         df = df[df.year < stem_year].copy()  # vintage filter
 
-        # ───────── single-slider weighting ─────────
+        # Slide bar for alpha
         alpha = st.slider("α  (0 = similarity-only, 1 = random-walk-only)",
                           0.0, 1.0, 0.6, 0.05)
 
