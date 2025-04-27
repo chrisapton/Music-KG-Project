@@ -27,7 +27,6 @@ RETURN s.title AS title,
 results = conn.query(query)
 conn.close()
 
-# ─────────────────────── DATAFRAME FORMAT ───────────────────────
 df = pd.DataFrame(results)
 df["Rank"] = range(1, len(df) + 1)
 df["artists"] = df["artists"].apply(lambda names: ", ".join(names) if names else "N/A")

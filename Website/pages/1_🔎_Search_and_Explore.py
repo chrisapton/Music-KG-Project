@@ -461,8 +461,7 @@ if st.session_state.submitted:
 
         # Query recursive sample relationships up to selected depth
 
-        artist_filters = artists if artists else None  # artists = info.get('artists', [])
-
+        artist_filters = artists if artists else None
 
         results = conn.query(
             f"""
@@ -495,12 +494,11 @@ if st.session_state.submitted:
         )
 
 
-        # STEP 1: Build graph for BFS
+        # Build the graph
         G = nx.DiGraph()
         for rec in results:
             G.add_edge(rec["src_id"], rec["tgt_id"])
 
-        # Find the root node (starting title)
         title_clean = title.strip().lower()
         root_id = None
 
@@ -512,7 +510,7 @@ if st.session_state.submitted:
                 root_id = rec["tgt_id"]
                 break
 
-        # STEP 2: Compute node depths using BFS
+        # Calculate depths
         depths = {node: float("inf") for node in G.nodes}
         if root_id is not None:
             depths[root_id] = 0
