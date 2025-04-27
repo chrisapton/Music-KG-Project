@@ -162,7 +162,7 @@ LIMIT 20
         df = df[df.year < stem_year].copy()  # vintage filter
 
         # ───────── single-slider weighting ─────────
-        alpha = st.slider("α  (0 = similarity-only, 1 = walk-only)",
+        alpha = st.slider("α  (0 = similarity-only, 1 = random-walk-only)",
                           0.0, 1.0, 0.6, 0.05)
 
         # fallback: if audio_cos is NaN → use struct_cos

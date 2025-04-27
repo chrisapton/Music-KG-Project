@@ -174,7 +174,7 @@ cython_debug/
 .pypirc
 
 .idea
-data
+/data/
 scrapers/proxy.py
 scrapers/proxies_list.txt
 knowledge-graph/neo4j/data/data
