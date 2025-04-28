@@ -168,16 +168,33 @@ else:
 
 with st.expander("🔗 Show sampling graph (co-samplers)"):
     G = nx.DiGraph()
-    G.add_node(selected_song, color="blue")
+
+    # Add the selected song node
+    selected_song_label = f"{selected_song} – {artist_str(selected_row.artist)}"
+    G.add_node(selected_song_label, color="blue")
 
     for row in recs:
-        G.add_node(row["recommended_title"], color="orange")
-        G.add_node(row["sampled_source"], color="gray")
-        G.add_edge(selected_song, row["sampled_source"])
-        G.add_edge(row["recommended_title"], row["sampled_source"])
+        recommended_label = f"{row['recommended_title']} – {', '.join(row['artists']) if isinstance(row['artists'], list) else row['artists']}"
+        sampled_label = f"{row['sampled_source']} – {', '.join(row['sampled_artists']) if isinstance(row['sampled_artists'], list) else row['sampled_artists']}"
+
+        G.add_node(recommended_label, color="orange")
+        G.add_node(sampled_label, color="gray")
+
+        G.add_edge(selected_song_label, sampled_label)
+        G.add_edge(recommended_label, sampled_label)
 
     pos = nx.spring_layout(G, seed=42)
-    colors = [G.nodes[n].get("color", "gray") for n in G.nodes]
-    plt.figure(figsize=(10, 6))
-    nx.draw(G, pos, with_labels=True, node_color=colors, font_size=9, arrows=True)
+    node_colors = [G.nodes[n].get("color", "gray") for n in G.nodes]
+
+    plt.figure(figsize=(12, 8))
+    nx.draw(
+        G, pos,
+        with_labels=True,
+        node_color=node_colors,
+        font_size=8,
+        arrows=True,
+        arrowstyle="-|>",
+        arrowsize=10,
+    )
     st.pyplot(plt)
+
