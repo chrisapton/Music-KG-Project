@@ -171,6 +171,11 @@ CALL gds.node2vec.write('songGraph', {
 """
 
 with driver.session() as session:
+    try:
+        session.run("CALL gds.graph.drop('songGraph', false) YIELD graphName")
+    except Exception as e:
+        pass
+    
     for constraint in constraints:
         session.run(constraint)
     print("✅ Constraints created")

@@ -3,20 +3,20 @@ import pandas as pd
 import numpy as np
 from scipy.spatial.distance import cdist
 from neo4j_utils import Neo4jConnection
-from scipy.spatial.distance import cdist
 
-
-# ───────────────── PAGE SETUP ─────────────────
-st.set_page_config(page_title="🎛️ Sample Recommendations", layout="wide")
+# ─────────────────────── PAGE SETUP ───────────────────────
+st.set_page_config(page_title="🎛️ Sample Recommendations", page_icon="🎛️", layout="wide")
 st.title("🎛️ Beat-Maker Sample Recommendations")
+st.sidebar.header("Recommendation Settings")
 
+# ─────────────────────── CONNECT TO NEO4J ───────────────────────
 @st.cache_resource
 def get_conn():
     return Neo4jConnection("bolt://localhost:7687", "neo4j", "testpassword")
 
-
 conn = get_conn()
 
+# ─────────────────────── FEATURE COLUMNS ───────────────────────
 FEATURE_COLS = [
     "danceability_danceable",
     "genre_dortmund_alternative", "genre_dortmund_blues",
@@ -50,128 +50,189 @@ FEATURE_COLS = [
     "voice_instrumental_voice"
 ]
 
-# Sample selector
+# ─────────────────────── SEARCH FOR STEM SAMPLE ───────────────────────
 stem_query = st.text_input("Search a sample (song title / artist):")
-if stem_query:
-    raw_hits = conn.query("""
- MATCH (s:Song)                       // 1) start with the song
-OPTIONAL MATCH (s)-[:HAS_ARTIST]->(a:Artist)
-WITH s, collect(a.name) AS artists   // 2) gather all artist names first
-WHERE toLower(s.title) CONTAINS toLower($q)
-   OR any(n IN artists WHERE toLower(n) CONTAINS toLower($q))
-MATCH (s)-[:RELEASED_IN]->(y:Year)
-RETURN id(s) AS id,
-       s.title  AS title,
-       artists  AS artist,                          // list of names
-       coalesce(y.value, s.release_year) AS year    // fallback
-ORDER BY year DESC
-LIMIT 20
-    """, {"q": stem_query})
 
-    df_hits = pd.DataFrame(raw_hits)
-    if df_hits.empty:
-        st.info("No matches")
-        st.stop()
+if not stem_query:
+    st.stop()
 
-    artist_str = lambda a: ", ".join(a) if isinstance(a, (list, tuple)) else str(a)
-    options = {
-        f"{r.title} – {artist_str(r.artist)} ({r.year})": r
-        for r in df_hits.itertuples()
-    }
+# ─────────────────────── FETCH MATCHES ───────────────────────
+@st.cache_data(show_spinner="Searching samples...")
+def search_samples(query):
+    results = conn.query("""
+        MATCH (s:Song)
+        OPTIONAL MATCH (s)-[:HAS_ARTIST]->(a:Artist)
+        WITH s, collect(a.name) AS artists
+        WHERE toLower(s.title) CONTAINS toLower($q)
+           OR any(n IN artists WHERE toLower(n) CONTAINS toLower($q))
+        MATCH (s)-[:RELEASED_IN]->(y:Year)
+        RETURN id(s) AS id,
+               s.title AS title,
+               artists AS artist,
+               coalesce(y.value, s.release_year) AS year
+        ORDER BY year DESC
+        LIMIT 20
+    """, {"q": query})
+    return results
 
-    choice = st.selectbox("Pick your sample", list(options.keys()))
+matches = search_samples(stem_query)
 
-    if choice:
-        stem_row = options[choice]
-        stem_id = int(stem_row.id)
-        stem_year = int(stem_row.year)
+if not matches:
+    st.warning("No matches found.")
+    st.stop()
 
-        # random walks
-        walks = conn.query("""
-          CALL gds.randomWalk.stream(
-              'songGraph',
-              {
-                sourceNodes: [$stem],     // start from the stem song
-                walkLength:   4,          // number of hops in each walk
-                walksPerNode: 800,        // how many walks to launch
-                relationshipWeightProperty: null
-              }
-            )
-            YIELD nodeIds
-            UNWIND nodeIds[1..] AS v      // drop the origin from each walk
-            RETURN v AS id, count(*) AS hits;
-        """, {"stem": stem_id})
-        walk_df = pd.DataFrame(walks)
-        walk_df["walk_prob"] = walk_df.hits / walk_df.hits.sum()
+df_hits = pd.DataFrame(matches)
+artist_str = lambda a: ", ".join(a) if isinstance(a, (list, tuple)) else str(a)
 
-        # Pull audio features and metadata
-        cand_ids = walk_df.id.tolist()
-        feature_props = ",\n       ".join([f"t.{c} AS {c}" for c in FEATURE_COLS])
+options = {
+    f"{r.title} – {artist_str(r.artist)} ({r.year})": r
+    for r in df_hits.itertuples()
+}
 
-        meta_query = f"""
-        UNWIND $ids AS i
-        MATCH (t:Song) WHERE id(t)=i
-        MATCH (t)-[:HAS_ARTIST]->(a:Artist)
-        MATCH (t)-[:RELEASED_IN]->(y:Year)
-        RETURN id(t) AS id,
-               t.title AS title,
-               collect(DISTINCT a.name) AS artist,
-               y.value AS year,
-               t.n2v AS vec_struct,
-               {feature_props}
-        """
-        meta_df = pd.DataFrame(conn.query(meta_query, {"ids": cand_ids}))
-        if meta_df.empty:
-            st.warning("Candidates returned 0 rows.")
-            st.stop()
+choice = st.selectbox("Pick your sample", list(options.keys()))
+if not choice:
+    st.stop()
 
-        # structural similarity (Node2Vec)
-        struct_mat = np.stack(meta_df.vec_struct.apply(lambda v: np.array(v, np.float32)))
-        stem_struct = np.array(conn.query(
-            "MATCH (s) WHERE id(s)=$id RETURN s.n2v AS v",
-            {"id": stem_id})[0]["v"], np.float32).reshape(1, -1)
-        meta_df["struct_cos"] = 1 - cdist(stem_struct, struct_mat, "cosine").flatten()
+stem_row = options[choice]
+stem_id = int(stem_row.id)
+stem_year = int(stem_row.year)
 
-        # audio similarity (scalar features)
-        audio_df = meta_df[FEATURE_COLS].astype(float)
-        if audio_df.isna().all().all():
-            meta_df["audio_cos"] = 0.0
-            st.info("⚠️  No scalar audio features present; using graph signals only.")
-        else:
-            audio_mat = audio_df.to_numpy(dtype=np.float32)
-            col_mean = audio_mat.mean(axis=0, keepdims=True)
-            col_std = audio_mat.std(axis=0, ddof=0, keepdims=True)
-            col_std[col_std == 0] = 1  # avoid /0
+# ─────────────────────── RANDOM WALKS ───────────────────────
+@st.cache_data(show_spinner="Generating random walks...")
+def get_random_walks(stem_node_id):
+    query = """
+    CALL gds.randomWalk.stream('songGraph', {
+        sourceNodes: [$stem],
+        walkLength: 4,
+        walksPerNode: 800
+    })
+    YIELD nodeIds
+    UNWIND nodeIds[1..] AS v
+    RETURN v AS id, count(*) AS hits
+    """
+    return conn.query(query, {"stem": stem_node_id})
 
-            audio_mat_std = (audio_mat - col_mean) / col_std
+walks = get_random_walks(stem_id)
+walk_df = pd.DataFrame(walks)
 
-            stem_audio = conn.query(f"""
-                MATCH (s:Song) WHERE id(s)=$id
-                RETURN {', '.join(f's.{c} AS {c}' for c in FEATURE_COLS)}
-            """, {"id": stem_id})[0]
-            stem_audio = np.array([[stem_audio[c] for c in FEATURE_COLS]],
-                                  dtype=np.float32)
-            stem_audio_std = (stem_audio - col_mean) / col_std
-            audio_cos = 1 - cdist(stem_audio_std, audio_mat_std, metric="cosine").flatten()
+if walk_df.empty:
+    st.warning("Random walks found no candidates.")
+    st.stop()
 
-            meta_df["audio_cos"] = audio_cos
+walk_df["walk_prob"] = walk_df.hits / walk_df.hits.sum()
+
+# ─────────────────────── FETCH CANDIDATES METADATA ───────────────────────
+@st.cache_data(show_spinner="Fetching candidate metadata...")
+def get_candidate_metadata(ids):
+    feature_props = ", ".join([f"t.{c} AS {c}" for c in FEATURE_COLS])
+    query = f"""
+    UNWIND $ids AS i
+    MATCH (t:Song) WHERE id(t) = i
+    MATCH (t)-[:HAS_ARTIST]->(a:Artist)
+    MATCH (t)-[:RELEASED_IN]->(y:Year)
+    RETURN id(t) AS id,
+           t.title AS title,
+           collect(DISTINCT a.name) AS artist,
+           y.value AS year,
+           t.n2v AS vec_struct,
+           {feature_props}
+    """
+    return conn.query(query, {"ids": ids})
+
+meta = get_candidate_metadata(walk_df.id.tolist())
+meta_df = pd.DataFrame(meta)
+
+if meta_df.empty:
+    st.warning("Candidates returned 0 results.")
+    st.stop()
+
+# ─────────────────────── SIMILARITY COMPUTATIONS ───────────────────────
+
+# Structural (node2vec)
+stem_struct = np.array(conn.query(
+    "MATCH (s) WHERE id(s) = $id RETURN s.n2v AS v", {"id": stem_id}
+)[0]["v"], np.float32).reshape(1, -1)
+
+if meta_df.vec_struct.isnull().all():
+    st.warning("Candidates missing structural vectors.")
+    st.stop()
+
+struct_mat = np.stack(meta_df.vec_struct.dropna().apply(lambda v: np.array(v, np.float32)))
+meta_df["struct_cos"] = 1 - cdist(stem_struct, struct_mat, "cosine").flatten()
+
+# Audio features
+audio_df = meta_df[FEATURE_COLS].astype(float)
+
+if audio_df.isna().all().all():
+    meta_df["audio_cos"] = np.nan
+    st.info("⚠️  No scalar audio features found; using structure only.")
+else:
+    audio_mat = audio_df.to_numpy(dtype=np.float32)
+    col_mean = audio_mat.mean(axis=0, keepdims=True)
+    col_std = audio_mat.std(axis=0, ddof=0, keepdims=True)
+    col_std[col_std == 0] = 1
+
+    audio_mat_std = (audio_mat - col_mean) / col_std
+
+    stem_audio_raw = conn.query(f"""
+        MATCH (s:Song) WHERE id(s)=$id
+        RETURN {', '.join(f's.{c}' for c in FEATURE_COLS)}
+    """, {"id": stem_id})[0]
+    
+    stem_audio = np.array([[stem_audio_raw.get(c, 0.0) for c in FEATURE_COLS]], dtype=np.float32)
+    stem_audio_std = (stem_audio - col_mean) / col_std
+
+    meta_df["audio_cos"] = 1 - cdist(stem_audio_std, audio_mat_std, metric="cosine").flatten()
+
+# ─────────────────────── SCORE & DISPLAY ───────────────────────
+df = meta_df.merge(walk_df[["id", "walk_prob"]], how="inner")
+df = df[df.year < stem_year].copy()
+
+alpha = st.sidebar.slider("Mix: Similar Sound (0) vs Sampling Graph (1)", 0.0, 1.0, 0.6, 0.05)
+
+sim = df.audio_cos.where(df.audio_cos.notna(), df.struct_cos)
+df["score"] = alpha * df.walk_prob + (1 - alpha) * sim
+
+st.subheader(f"🔎 Recommended Samples Based on: **{stem_row.title}**")
+st.dataframe(
+    df.sort_values("score", ascending=False)
+      .head(100)[["title", "artist", "year", "score"]]
+      .style.format({"score": "{:.3f}"})
+)
+
+import networkx as nx
+import matplotlib.pyplot as plt
+
+# ─────────────────────── SAMPLING GRAPH ───────────────────────
+with st.expander("🔗 Show sampling graph (outgoing edges only)"):
+    G = nx.DiGraph()
+
+    # Format stem label with song + artist(s)
+    stem_artist_str = ", ".join(stem_row.artist) if isinstance(stem_row.artist, list) else str(stem_row.artist)
+    stem_label = f"{stem_row.title} – {stem_artist_str}"
+    G.add_node(stem_label, color="blue")
+
+    # Add outgoing nodes
+    for row in df.sort_values("score", ascending=False).head(100).itertuples():
+        target_artist_str = ", ".join(row.artist) if isinstance(row.artist, list) else str(row.artist)
+        target_label = f"{row.title} – {target_artist_str}"
+        G.add_node(target_label, color="orange")
+        G.add_edge(stem_label, target_label)
+
+    pos = nx.spring_layout(G, seed=42)
+    node_colors = [G.nodes[n].get("color", "gray") for n in G.nodes]
+
+    plt.figure(figsize=(12, 8))
+    nx.draw(
+        G, pos,
+        with_labels=True,
+        node_color=node_colors,
+        font_size=8,
+        arrows=True,
+        arrowstyle="-|>",
+        arrowsize=10,
+    )
+    st.pyplot(plt)
 
 
-        df = meta_df.merge(walk_df[["id", "walk_prob"]], how="inner")
-        df = df[df.year < stem_year].copy()  # vintage filter
 
-        # Slide bar for alpha
-        alpha = st.slider("α  (0 = similarity-only, 1 = random-walk-only)",
-                          0.0, 1.0, 0.6, 0.05)
-
-        # fallback: if audio_cos is NaN → use struct_cos
-        sim = df.audio_cos.where(df.audio_cos.notna(), df.struct_cos)
-
-        df["score"] = alpha * df.walk_prob + (1 - alpha) * sim
-
-        topk = st.slider("Show top-K", 5, 50, 20)
-        st.dataframe(
-            df.sort_values("score", ascending=False)
-            .head(topk)[["title", "artist", "year", "score"]]
-            .style.format({"score": "{:.3f}"})
-        )
