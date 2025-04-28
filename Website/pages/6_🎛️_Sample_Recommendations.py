@@ -205,34 +205,86 @@ import matplotlib.pyplot as plt
 
 # ─────────────────────── SAMPLING GRAPH ───────────────────────
 with st.expander("🔗 Show sampling graph (outgoing edges only)"):
-    G = nx.DiGraph()
 
-    # Format stem label with song + artist(s)
-    stem_artist_str = ", ".join(stem_row.artist) if isinstance(stem_row.artist, list) else str(stem_row.artist)
-    stem_label = f"{stem_row.title} – {stem_artist_str}"
-    G.add_node(stem_label, color="blue")
+    @st.cache_data(show_spinner="Loading sampling tree...")
+    def fetch_sampling_tree_full(stem_id):
+        query = """
+        MATCH path = (s:Song)-[:SAMPLES*1..3]->(sampled:Song)
+        WHERE id(s) = $id
+        UNWIND relationships(path) AS rel
+        WITH startNode(rel) AS src, endNode(rel) AS tgt
+        OPTIONAL MATCH (src)-[:HAS_ARTIST]->(src_artist:Artist)
+        OPTIONAL MATCH (tgt)-[:HAS_ARTIST]->(tgt_artist:Artist)
+        RETURN 
+          id(src) AS src_id,
+          src.title AS src_title,
+          collect(DISTINCT src_artist.name) AS src_artists,
+          id(tgt) AS tgt_id,
+          tgt.title AS tgt_title,
+          collect(DISTINCT tgt_artist.name) AS tgt_artists
+        """
+        return conn.query(query, {"id": stem_id})
 
-    # Add outgoing nodes
-    for row in df.sort_values("score", ascending=False).head(100).itertuples():
-        target_artist_str = ", ".join(row.artist) if isinstance(row.artist, list) else str(row.artist)
-        target_label = f"{row.title} – {target_artist_str}"
-        G.add_node(target_label, color="orange")
-        G.add_edge(stem_label, target_label)
+    tree_data = fetch_sampling_tree_full(stem_id)
 
-    pos = nx.spring_layout(G, seed=42)
-    node_colors = [G.nodes[n].get("color", "gray") for n in G.nodes]
+    if not tree_data:
+        st.info("No outgoing samples found from this song.")
+    else:
+        G = nx.DiGraph()
+        id_to_label = {}
 
-    plt.figure(figsize=(12, 8))
-    nx.draw(
-        G, pos,
-        with_labels=True,
-        node_color=node_colors,
-        font_size=8,
-        arrows=True,
-        arrowstyle="-|>",
-        arrowsize=10,
-    )
-    st.pyplot(plt)
+        # Build set of IDs we want to keep (root + candidates)
+        valid_ids = set([stem_id]) | set(df["id"])
+
+        # Add the root node
+        stem_artist_str = ", ".join(stem_row.artist) if isinstance(stem_row.artist, list) else str(stem_row.artist)
+        stem_label = f"{stem_row.title} – {stem_artist_str}"
+        id_to_label[stem_id] = stem_label
+        G.add_node(stem_label, color="blue")
+
+        for record in tree_data:
+            # Skip if neither the source nor target are in the valid set
+            if record["src_id"] not in valid_ids and record["tgt_id"] not in valid_ids:
+                continue
+
+            src_artists = [a for a in record["src_artists"] if a] if isinstance(record["src_artists"], list) else []
+            tgt_artists = [a for a in record["tgt_artists"] if a] if isinstance(record["tgt_artists"], list) else []
+
+            src_label = f"{record['src_title']} – {', '.join(src_artists)}" if src_artists else record['src_title']
+            tgt_label = f"{record['tgt_title']} – {', '.join(tgt_artists)}" if tgt_artists else record['tgt_title']
+
+            if record["src_id"] not in id_to_label and record["src_id"] in valid_ids:
+                id_to_label[record["src_id"]] = src_label
+                G.add_node(src_label, color="orange" if record["src_id"] != stem_id else "blue")
+
+            if record["tgt_id"] not in id_to_label and record["tgt_id"] in valid_ids:
+                id_to_label[record["tgt_id"]] = tgt_label
+                G.add_node(tgt_label, color="orange")
+
+            # Only add edge if both nodes are valid
+            if record["src_id"] in id_to_label and record["tgt_id"] in id_to_label:
+                G.add_edge(id_to_label[record["src_id"]], id_to_label[record["tgt_id"]])
+
+        # 👉 Kamada-Kawai layout for connected graphs
+        pos = nx.kamada_kawai_layout(G)
+
+        node_colors = [G.nodes[n].get("color", "gray") for n in G.nodes]
+
+        plt.figure(figsize=(14, 10))
+        nx.draw(
+            G, pos,
+            with_labels=True,
+            node_color=node_colors,
+            font_size=7,
+            arrows=True,
+            arrowstyle="-|>",
+            arrowsize=12,
+        )
+        st.pyplot(plt)
+
+
+
+
 
 
 
