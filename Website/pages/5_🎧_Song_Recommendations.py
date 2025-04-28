@@ -46,28 +46,70 @@ def get_spotify_popularity(song_title, artist_name=None):
     return 0  # Default if not found
 
 # ─────────────────────── GET ALL SONGS ───────────────────────
-@st.cache_data
-def get_all_songs():
-    query = "MATCH (s:Song) RETURN DISTINCT s.title AS title ORDER BY s.title"
-    return [r["title"] for r in conn.query(query) if r["title"]]
+@st.cache_data(show_spinner="Searching songs...")
+def search_songs(query):
+    results = conn.query("""
+        MATCH (s:Song)
+        OPTIONAL MATCH (s)-[:HAS_ARTIST]->(a:Artist)
+        WITH s, collect(a.name) AS artists
+        WHERE toLower(s.title) CONTAINS toLower($q)
+           OR any(n IN artists WHERE toLower(n) CONTAINS toLower($q))
+        MATCH (s)-[:RELEASED_IN]->(y:Year)
+        RETURN id(s) AS id,
+               s.title AS title,
+               artists AS artist,
+               coalesce(y.value, s.release_year) AS year
+        ORDER BY year DESC
+        LIMIT 20
+    """, {"q": query})
+    return results
 
-song_list = get_all_songs()
-selected_song = st.selectbox("Select a song to base recommendations on", song_list)
+song_query = st.text_input("Search for a song (title or artist):")
 
-if not selected_song:
+if not song_query:
     st.stop()
 
+matches = search_songs(song_query)
+
+if not matches:
+    st.warning("No songs found matching your search.")
+    st.stop()
+
+df_matches = pd.DataFrame(matches)
+artist_str = lambda a: ", ".join(a) if isinstance(a, (list, tuple)) else str(a)
+
+options = {
+    f"{r.title} – {artist_str(r.artist)} ({r.year})": r
+    for r in df_matches.itertuples()
+}
+
+selected_choice = st.selectbox("Select a song:", list(options.keys()))
+if not selected_choice:
+    st.stop()
+
+selected_row = options[selected_choice]
+selected_song = selected_row.title
+selected_song_id = selected_row.id
+
+
 # ─────────────────────── GET SELECTED SONG POPULARITY ───────────────────────
-selected_song_popularity = get_spotify_popularity(selected_song)
+artist_name = ", ".join(selected_row.artist) if isinstance(selected_row.artist, (list, tuple)) else selected_row.artist
+selected_song_popularity = get_spotify_popularity(selected_song, artist_name)
 
 st.markdown(f"**Selected Song Spotify Popularity**: 🎵 **{selected_song_popularity}** / 100")
 
 
 # ─────────────────────── GET RECOMMENDATIONS ───────────────────────
 @st.cache_data(show_spinner="Fetching recommendations...")
-def get_recommendations(title):
+def get_recommendations(title, artist_names):
     query = """
-    MATCH (s:Song {title: $title})-[:SAMPLES]->(sampled:Song)
+    MATCH (s:Song)
+    OPTIONAL MATCH (s)-[:HAS_ARTIST]->(a:Artist)
+    WITH s, collect(DISTINCT a.name) AS artists
+    WHERE toLower(s.title) = toLower($title)
+      AND any(name IN artists WHERE toLower(name) IN $artist_names)
+    
+    MATCH (s)-[:SAMPLES]->(sampled:Song)
     WITH sampled
     MATCH (rec:Song)-[:SAMPLES]->(sampled)
     WHERE rec.title <> $title
@@ -79,21 +121,26 @@ def get_recommendations(title):
            collect(DISTINCT sampled_artist.name) AS sampled_artists
     LIMIT 15
     """
-    return conn.query(query, {"title": title})
+    return conn.query(query, {
+        "title": title,
+        "artist_names": [name.lower() for name in artist_names] if artist_names else []
+    })
+
 
 # ─────────────────────── FETCH AND DISPLAY ───────────────────────
-recs = get_recommendations(selected_song)
+recs = get_recommendations(selected_song, selected_row.artist)
 df = pd.DataFrame(recs)
 
 if df.empty:
     st.warning("No recommendations found. This song may not have any sampling connections.")
 else:
-    df["artists"] = df["artists"].apply(lambda a: ", ".join(a) if a else "Unknown")
-    df["sampled_artists"] = df["sampled_artists"].apply(lambda a: ", ".join(a) if a else "Unknown")
+    # Keep Artists and Sampled Artists as lists
+    df["artists"] = df["artists"].apply(lambda a: a if isinstance(a, list) else [])
+    df["sampled_artists"] = df["sampled_artists"].apply(lambda a: a if isinstance(a, list) else [])
 
     # Fetch live Spotify popularity
     df["Spotify Popularity"] = df.apply(
-        lambda row: get_spotify_popularity(row["recommended_title"], row["artists"].split(",")[0] if row["artists"] else None),
+        lambda row: get_spotify_popularity(row["recommended_title"], row["artists"][0] if row["artists"] else None),
         axis=1
     )
 
@@ -107,7 +154,16 @@ else:
     df = df.sort_values("Spotify Popularity", ascending=False)
 
     st.subheader(f"Songs that sampled the same tracks as **{selected_song}**")
-    st.dataframe(df, use_container_width=True)
+
+    st.data_editor(
+        df[["Recommended Song", "Artists", "Shared Sample", "Shared Sample Artist(s)", "Spotify Popularity"]],
+        column_config={
+            "Artists": st.column_config.ListColumn("Artists"),
+            "Shared Sample Artist(s)": st.column_config.ListColumn("Shared Sample Artist(s)")
+        },
+        use_container_width=True,
+        disabled=True
+    )
 
 
 with st.expander("🔗 Show sampling graph (co-samplers)"):
