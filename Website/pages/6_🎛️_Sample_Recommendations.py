@@ -233,6 +233,9 @@ with st.expander("🔗 Show sampling graph (outgoing edges only)"):
         G = nx.DiGraph()
         id_to_label = {}
 
+        # Build set of IDs we want to keep (root + candidates)
+        valid_ids = set([stem_id]) | set(df["id"])
+
         # Add the root node
         stem_artist_str = ", ".join(stem_row.artist) if isinstance(stem_row.artist, list) else str(stem_row.artist)
         stem_label = f"{stem_row.title} – {stem_artist_str}"
@@ -240,23 +243,29 @@ with st.expander("🔗 Show sampling graph (outgoing edges only)"):
         G.add_node(stem_label, color="blue")
 
         for record in tree_data:
+            # Skip if neither the source nor target are in the valid set
+            if record["src_id"] not in valid_ids and record["tgt_id"] not in valid_ids:
+                continue
+
             src_artists = [a for a in record["src_artists"] if a] if isinstance(record["src_artists"], list) else []
             tgt_artists = [a for a in record["tgt_artists"] if a] if isinstance(record["tgt_artists"], list) else []
 
             src_label = f"{record['src_title']} – {', '.join(src_artists)}" if src_artists else record['src_title']
             tgt_label = f"{record['tgt_title']} – {', '.join(tgt_artists)}" if tgt_artists else record['tgt_title']
 
-            if record["src_id"] not in id_to_label:
+            if record["src_id"] not in id_to_label and record["src_id"] in valid_ids:
                 id_to_label[record["src_id"]] = src_label
-                G.add_node(src_label, color="orange" if record["src_id"] == stem_id else "gray")
+                G.add_node(src_label, color="orange" if record["src_id"] != stem_id else "blue")
 
-            if record["tgt_id"] not in id_to_label:
+            if record["tgt_id"] not in id_to_label and record["tgt_id"] in valid_ids:
                 id_to_label[record["tgt_id"]] = tgt_label
                 G.add_node(tgt_label, color="orange")
 
-            G.add_edge(id_to_label[record["src_id"]], id_to_label[record["tgt_id"]])
+            # Only add edge if both nodes are valid
+            if record["src_id"] in id_to_label and record["tgt_id"] in id_to_label:
+                G.add_edge(id_to_label[record["src_id"]], id_to_label[record["tgt_id"]])
 
-        # 👉 Try Kamada-Kawai layout — works much better for connected graphs
+        # 👉 Kamada-Kawai layout for connected graphs
         pos = nx.kamada_kawai_layout(G)
 
         node_colors = [G.nodes[n].get("color", "gray") for n in G.nodes]
@@ -272,6 +281,7 @@ with st.expander("🔗 Show sampling graph (outgoing edges only)"):
             arrowsize=12,
         )
         st.pyplot(plt)
+
 
 
 
