@@ -45,7 +45,7 @@ From the project root directory:
 
 ```bash
 cd Website
-streamlit run Website/Home.py
+streamlit run Home.py
 ```
 
 - The app will open in your browser (usually at http://localhost:8501).
