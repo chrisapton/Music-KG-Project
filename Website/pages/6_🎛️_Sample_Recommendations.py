@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 from scipy.spatial.distance import cdist
 from neo4j_utils import Neo4jConnection
+import streamlit.components.v1 as components
+from pyvis.network import Network
 
 # ─────────────────────── PAGE SETUP ───────────────────────
 st.set_page_config(page_title="🎛️ Sample Recommendations", page_icon="🎛️", layout="wide")
@@ -243,7 +245,7 @@ with st.expander("🔗 Show sampling graph (outgoing edges only)"):
         G.add_node(stem_label, color="blue")
 
         for record in tree_data:
-            # Skip if neither the source nor target are in the valid set
+            # Only keep edges if src or tgt is in the valid_ids
             if record["src_id"] not in valid_ids and record["tgt_id"] not in valid_ids:
                 continue
 
@@ -253,34 +255,28 @@ with st.expander("🔗 Show sampling graph (outgoing edges only)"):
             src_label = f"{record['src_title']} – {', '.join(src_artists)}" if src_artists else record['src_title']
             tgt_label = f"{record['tgt_title']} – {', '.join(tgt_artists)}" if tgt_artists else record['tgt_title']
 
-            if record["src_id"] not in id_to_label and record["src_id"] in valid_ids:
+            if record["src_id"] not in id_to_label:
                 id_to_label[record["src_id"]] = src_label
                 G.add_node(src_label, color="orange" if record["src_id"] != stem_id else "blue")
 
-            if record["tgt_id"] not in id_to_label and record["tgt_id"] in valid_ids:
+            if record["tgt_id"] not in id_to_label:
                 id_to_label[record["tgt_id"]] = tgt_label
                 G.add_node(tgt_label, color="orange")
 
-            # Only add edge if both nodes are valid
-            if record["src_id"] in id_to_label and record["tgt_id"] in id_to_label:
-                G.add_edge(id_to_label[record["src_id"]], id_to_label[record["tgt_id"]])
+            # Always add the edge if src or tgt is in valid_ids
+            G.add_edge(id_to_label[record["src_id"]], id_to_label[record["tgt_id"]])
+
 
         # 👉 Kamada-Kawai layout for connected graphs
         pos = nx.kamada_kawai_layout(G)
 
         node_colors = [G.nodes[n].get("color", "gray") for n in G.nodes]
 
-        plt.figure(figsize=(14, 10))
-        nx.draw(
-            G, pos,
-            with_labels=True,
-            node_color=node_colors,
-            font_size=7,
-            arrows=True,
-            arrowstyle="-|>",
-            arrowsize=12,
-        )
-        st.pyplot(plt)
+        nt = Network(height="690px", width="100%", directed=True)
+        nt.from_nx(G)
+        nt.set_options("""var options={ "physics":{ "solver":"forceAtlas2Based" } }""")
+        html = nt.generate_html()
+        components.html(html, height=700)
 
 
 

@@ -5,6 +5,8 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from neo4j_utils import Neo4jConnection
 import networkx as nx
 import matplotlib.pyplot as plt
+import streamlit.components.v1 as components
+from pyvis.network import Network
 
 # ─────────────────────── PAGE SETUP ───────────────────────
 st.set_page_config(page_title="🎧 Song Recommendations", page_icon="🎧", layout="wide")
@@ -51,9 +53,9 @@ def search_songs(query):
     results = conn.query("""
         MATCH (s:Song)
         OPTIONAL MATCH (s)-[:HAS_ARTIST]->(a:Artist)
-        WITH s, collect(a.name) AS artists
+        WITH s, collect(DISTINCT a.name) AS artists
         WHERE toLower(s.title) CONTAINS toLower($q)
-           OR any(n IN artists WHERE toLower(n) CONTAINS toLower($q))
+           OR (size(artists) > 0 AND any(name IN artists WHERE toLower(name) CONTAINS toLower($q)))
         MATCH (s)-[:RELEASED_IN]->(y:Year)
         RETURN id(s) AS id,
                s.title AS title,
@@ -64,6 +66,8 @@ def search_songs(query):
     """, {"q": query})
     return results
 
+
+# Search input
 song_query = st.text_input("Search for a song (title or artist):")
 
 if not song_query:
@@ -74,6 +78,7 @@ matches = search_songs(song_query)
 if not matches:
     st.warning("No songs found matching your search.")
     st.stop()
+
 
 df_matches = pd.DataFrame(matches)
 artist_str = lambda a: ", ".join(a) if isinstance(a, (list, tuple)) else str(a)
@@ -186,15 +191,9 @@ with st.expander("🔗 Show sampling graph (co-samplers)"):
     pos = nx.spring_layout(G, seed=42)
     node_colors = [G.nodes[n].get("color", "gray") for n in G.nodes]
 
-    plt.figure(figsize=(12, 8))
-    nx.draw(
-        G, pos,
-        with_labels=True,
-        node_color=node_colors,
-        font_size=8,
-        arrows=True,
-        arrowstyle="-|>",
-        arrowsize=10,
-    )
-    st.pyplot(plt)
+    nt = Network(height="690px", width="100%", directed=True)
+    nt.from_nx(G)
+    nt.set_options("""var options={ "physics":{ "solver":"forceAtlas2Based" } }""")
+    html = nt.generate_html()
+    components.html(html, height=700)
 
