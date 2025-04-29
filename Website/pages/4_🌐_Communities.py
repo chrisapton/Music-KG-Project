@@ -1,11 +1,13 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from pyvis.network import Network
+import streamlit.components.v1 as components
 from neo4j_utils import Neo4jConnection
 
 st.set_page_config(page_title="Sampling Communities", page_icon="🌐", layout="wide")
 st.title("🌐 Sampling Communities")
-st.sidebar.header("Community Filters")
+st.sidebar.header("Community Selection")
 
 
 @st.cache_resource
@@ -62,7 +64,7 @@ def get_top_songs(community, limit=20):
     return pd.DataFrame(conn.query(query, {"community": community, "limit": limit}))
 
 
-# ─────────────────────── SIDEBAR FILTERS ───────────────────────
+# Sidebar community selection
 communities_data = get_community_list()
 community_options = [f"Community {r['community']} ({r['size']} songs)" for r in communities_data]
 community_map = {f"Community {r['community']} ({r['size']} songs)": r['community'] for r in communities_data}
@@ -70,7 +72,7 @@ community_map = {f"Community {r['community']} ({r['size']} songs)": r['community
 selected_label = st.sidebar.selectbox("Select a Community", community_options)
 selected_community = community_map[selected_label]
 
-# ─────────────────────── AUDIO PROFILE VISUAL ───────────────────────
+# Audio profile
 st.subheader("Audio Profile of Community")
 profile = get_community_profile(selected_community)
 radar_df = pd.DataFrame({
@@ -81,7 +83,7 @@ fig = px.line_polar(radar_df, r='Score', theta='Feature', line_close=True)
 fig.update_traces(fill='toself')
 st.plotly_chart(fig, use_container_width=True)
 
-# ─────────────────────── TOP SONGS TABLE ───────────────────────
+# Top songs table
 st.subheader("Top Songs in Community")
 top_songs_df = get_top_songs(selected_community)
 if not top_songs_df.empty:
@@ -89,9 +91,6 @@ if not top_songs_df.empty:
 else:
     st.info("No songs with PageRank/audio features in this community.")
 
-
-from pyvis.network import Network
-import streamlit.components.v1 as components
 
 @st.cache_data
 def get_community_edges(community: int, limit: int = 200):
@@ -104,7 +103,7 @@ def get_community_edges(community: int, limit: int = 200):
     return pd.DataFrame(conn.query(query, {"community": community, "limit": limit}))
 
 
-# ─────────────────────── COMMUNITY NETWORK ───────────────────────
+# Sampling network visualization
 st.subheader("Sampling Network Within Community")
 
 edge_df = get_community_edges(selected_community)

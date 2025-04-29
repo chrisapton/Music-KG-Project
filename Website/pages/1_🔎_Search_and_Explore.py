@@ -2,22 +2,23 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from pyvis.network import Network
-# from ipysigma import Sigma
 import networkx as nx
 import streamlit.components.v1 as components
 from neo4j_utils import Neo4jConnection
 import math
 
+
 # Neo4j connection
-conn = Neo4jConnection("bolt://localhost:7687", "neo4j", "testpassword")
+@st.cache_resource
+def get_conn():
+    return Neo4jConnection("bolt://localhost:7687", "neo4j", "testpassword")
+
+
+conn = get_conn()
 
 st.set_page_config(page_title="Search & Explore", page_icon="🔍", layout="wide")
-
-# ─────────────────────── sidebar ───────────────────────
 st.sidebar.header("Search Mode")
 sidebar_search_type = st.sidebar.selectbox("Search Type", ["Artist", "Song"])
-
-# ─────────────────────── main page ─────────────────────
 st.markdown("# 🔍 Search & Explore")
 
 # Read query params from URL
@@ -124,7 +125,6 @@ if st.session_state.submitted:
                 """,
                 {"artist": artist}
             )[0]["cnt"]
-
 
             # Display Sampling Stats
             st.markdown("### Sampling Stats")
@@ -369,7 +369,6 @@ if st.session_state.submitted:
         st.write(f"- Sampled by {incoming} songs")
         st.write(f"- Appears in {chains} sample chains")
         st.write(f"- PageRank Score: {pagerank_score}")
-
 
         # Songs This Track Sampled
         sampled = conn.query(

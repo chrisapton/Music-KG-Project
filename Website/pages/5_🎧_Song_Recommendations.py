@@ -4,23 +4,23 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from neo4j_utils import Neo4jConnection
 import networkx as nx
-import matplotlib.pyplot as plt
 import streamlit.components.v1 as components
 from pyvis.network import Network
 
-# ─────────────────────── PAGE SETUP ───────────────────────
 st.set_page_config(page_title="🎧 Song Recommendations", page_icon="🎧", layout="wide")
 st.title("🎧 Song Recommendations from Sampling Patterns")
-st.sidebar.header("Recommendation Settings")
 
-# ─────────────────────── CONNECT TO NEO4J ───────────────────────
+
+# Neo4j connection
 @st.cache_resource
 def get_conn():
     return Neo4jConnection("bolt://localhost:7687", "neo4j", "testpassword")
 
+
 conn = get_conn()
 
-# ─────────────────────── CONNECT TO SPOTIFY ───────────────────────
+
+# Spotify client setup
 @st.cache_resource
 def get_spotify_client():
     client_id = st.secrets["SPOTIFY_CLIENT_ID"]
@@ -28,9 +28,11 @@ def get_spotify_client():
     auth_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
     return spotipy.Spotify(auth_manager=auth_manager)
 
+
 sp = get_spotify_client()
 
-# ─────────────────────── FUNCTION TO GET SPOTIFY POPULARITY ───────────────────────
+
+# Get Spotify popularity for a song
 @st.cache_data(show_spinner="Fetching Spotify popularity...")
 def get_spotify_popularity(song_title, artist_name=None):
     try:
@@ -47,7 +49,8 @@ def get_spotify_popularity(song_title, artist_name=None):
     
     return 0  # Default if not found
 
-# ─────────────────────── GET ALL SONGS ───────────────────────
+
+# Search for songs
 @st.cache_data(show_spinner="Searching songs...")
 def search_songs(query):
     results = conn.query("""
@@ -97,14 +100,14 @@ selected_song = selected_row.title
 selected_song_id = selected_row.id
 
 
-# ─────────────────────── GET SELECTED SONG POPULARITY ───────────────────────
+# Get Spotify popularity for the selected song
 artist_name = ", ".join(selected_row.artist) if isinstance(selected_row.artist, (list, tuple)) else selected_row.artist
 selected_song_popularity = get_spotify_popularity(selected_song, artist_name)
 
 st.markdown(f"**Selected Song Spotify Popularity**: 🎵 **{selected_song_popularity}** / 100")
 
 
-# ─────────────────────── GET RECOMMENDATIONS ───────────────────────
+# Get recommendations based on sampling
 @st.cache_data(show_spinner="Fetching recommendations...")
 def get_recommendations(title, artist_names):
     query = """
@@ -132,7 +135,7 @@ def get_recommendations(title, artist_names):
     })
 
 
-# ─────────────────────── FETCH AND DISPLAY ───────────────────────
+# Display recommendations
 recs = get_recommendations(selected_song, selected_row.artist)
 df = pd.DataFrame(recs)
 
@@ -171,7 +174,7 @@ else:
     )
 
 
-with st.expander("🔗 Show sampling graph (co-samplers)"):
+with st.expander("Show sampling graph (co-samplers)"):
     G = nx.DiGraph()
 
     # Add the selected song node
@@ -188,12 +191,8 @@ with st.expander("🔗 Show sampling graph (co-samplers)"):
         G.add_edge(selected_song_label, sampled_label)
         G.add_edge(recommended_label, sampled_label)
 
-    pos = nx.spring_layout(G, seed=42)
-    node_colors = [G.nodes[n].get("color", "gray") for n in G.nodes]
-
     nt = Network(height="690px", width="100%", directed=True)
     nt.from_nx(G)
     nt.set_options("""var options={ "physics":{ "solver":"forceAtlas2Based" } }""")
     html = nt.generate_html()
     components.html(html, height=700)
-

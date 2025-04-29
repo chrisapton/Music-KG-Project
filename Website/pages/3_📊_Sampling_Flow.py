@@ -4,17 +4,18 @@ from neo4j_utils import Neo4jConnection
 import plotly.graph_objects as go
 import plotly.express as px
 
-# ─────────────────────── PAGE SETUP ───────────────────────
 st.set_page_config(page_title="Sampling Flow", page_icon="📊", layout="wide")
 st.title("📊 Genre-to-Genre Sampling Flow")
 st.sidebar.header("Visualization Settings")
 
-# ─────────────────────── CACHED CONNECTION ───────────────────────
+
+# Neo4j connection
 @st.cache_resource
 def get_conn():
     return Neo4jConnection("bolt://localhost:7687", "neo4j", "testpassword")
 
-# ─────────────────────── CACHED DATA ───────────────────────
+
+# Load sampling data
 @st.cache_data
 def load_sampling_data():
     query = """
@@ -63,7 +64,7 @@ for i, label in enumerate(all_labels):
     x_vals.append(0.0 if "(Original)" in label else 1.0)
     y_vals.append(i / max(len(all_labels) - 1, 1))
 
-# ─────────────────────── SELECT SOURCE/TARGET ───────────────────────
+# Source/Target selector
 st.sidebar.subheader("Highlight by Node")
 select_by = st.sidebar.radio("Select by", ["Source Genre", "Target Genre"])
 
@@ -77,7 +78,7 @@ else:
 highlight_color = px.colors.qualitative.Plotly[0]
 colors = [highlight_color if h else "rgba(200,200,200,0.2)" for h in highlighted]
 
-# ─────────────────────── DRAW SANKEY ───────────────────────
+# Sanky diagram
 fig = go.Figure(data=[go.Sankey(
     arrangement="fixed",
     node=dict(
@@ -106,7 +107,6 @@ nodes_per_column = max(
 dynamic_height = int(nodes_per_column * 40 + 100)
 
 fig.update_layout(
-    title_text="🎵 Genre-to-Genre Sampling Flow",
     font=dict(size=16, family="Arial", color='blue'),
     height=dynamic_height,
 )
@@ -115,7 +115,7 @@ fig.data[0].update(textfont=dict(color="black"))
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ─────────────────────── BREAKDOWN CHART ───────────────────────
+# Breakdown pie chart
 filtered = df[df["source_genre"] == selected_node] if select_by == "Source Genre" else df[df["target_genre"] == selected_node]
 breakdown = filtered.groupby("target_genre" if select_by == "Source Genre" else "source_genre")["count"].sum().sort_values(ascending=False)
 breakdown_percent = breakdown / breakdown.sum() * 100
