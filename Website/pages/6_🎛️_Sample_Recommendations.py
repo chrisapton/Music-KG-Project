@@ -1,24 +1,25 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import networkx as nx
 from scipy.spatial.distance import cdist
 from neo4j_utils import Neo4jConnection
 import streamlit.components.v1 as components
 from pyvis.network import Network
 
-# ─────────────────────── PAGE SETUP ───────────────────────
-st.set_page_config(page_title="🎛️ Sample Recommendations", page_icon="🎛️", layout="wide")
+st.set_page_config(page_title="Sample Recommendations", page_icon="🎛️", layout="wide")
 st.title("🎛️ Beat-Maker Sample Recommendations")
 st.sidebar.header("Recommendation Settings")
 
-# ─────────────────────── CONNECT TO NEO4J ───────────────────────
+
+# Neo4j connection
 @st.cache_resource
 def get_conn():
     return Neo4jConnection("bolt://localhost:7687", "neo4j", "testpassword")
 
+
 conn = get_conn()
 
-# ─────────────────────── FEATURE COLUMNS ───────────────────────
 FEATURE_COLS = [
     "danceability_danceable",
     "genre_dortmund_alternative", "genre_dortmund_blues",
@@ -52,13 +53,14 @@ FEATURE_COLS = [
     "voice_instrumental_voice"
 ]
 
-# ─────────────────────── SEARCH FOR STEM SAMPLE ───────────────────────
+# Search Sample
 stem_query = st.text_input("Search a sample (song title / artist):")
 
 if not stem_query:
     st.stop()
 
-# ─────────────────────── FETCH MATCHES ───────────────────────
+
+# Get matching samples
 @st.cache_data(show_spinner="Searching samples...")
 def search_samples(query):
     results = conn.query("""
@@ -76,6 +78,7 @@ def search_samples(query):
         LIMIT 20
     """, {"q": query})
     return results
+
 
 matches = search_samples(stem_query)
 
@@ -99,7 +102,8 @@ stem_row = options[choice]
 stem_id = int(stem_row.id)
 stem_year = int(stem_row.year)
 
-# ─────────────────────── RANDOM WALKS ───────────────────────
+
+# Random Warks
 @st.cache_data(show_spinner="Generating random walks...")
 def get_random_walks(stem_node_id):
     query = """
@@ -114,6 +118,7 @@ def get_random_walks(stem_node_id):
     """
     return conn.query(query, {"stem": stem_node_id})
 
+
 walks = get_random_walks(stem_id)
 walk_df = pd.DataFrame(walks)
 
@@ -123,7 +128,8 @@ if walk_df.empty:
 
 walk_df["walk_prob"] = walk_df.hits / walk_df.hits.sum()
 
-# ─────────────────────── FETCH CANDIDATES METADATA ───────────────────────
+
+# Get candidate metadata
 @st.cache_data(show_spinner="Fetching candidate metadata...")
 def get_candidate_metadata(ids):
     feature_props = ", ".join([f"t.{c} AS {c}" for c in FEATURE_COLS])
@@ -141,6 +147,7 @@ def get_candidate_metadata(ids):
     """
     return conn.query(query, {"ids": ids})
 
+
 meta = get_candidate_metadata(walk_df.id.tolist())
 meta_df = pd.DataFrame(meta)
 
@@ -148,8 +155,7 @@ if meta_df.empty:
     st.warning("Candidates returned 0 results.")
     st.stop()
 
-# ─────────────────────── SIMILARITY COMPUTATIONS ───────────────────────
-
+# Similarity scores
 # Structural (node2vec)
 stem_struct = np.array(conn.query(
     "MATCH (s) WHERE id(s) = $id RETURN s.n2v AS v", {"id": stem_id}
@@ -180,13 +186,13 @@ else:
         MATCH (s:Song) WHERE id(s)=$id
         RETURN {', '.join(f's.{c}' for c in FEATURE_COLS)}
     """, {"id": stem_id})[0]
-    
+
     stem_audio = np.array([[stem_audio_raw.get(c, 0.0) for c in FEATURE_COLS]], dtype=np.float32)
     stem_audio_std = (stem_audio - col_mean) / col_std
 
     meta_df["audio_cos"] = 1 - cdist(stem_audio_std, audio_mat_std, metric="cosine").flatten()
 
-# ─────────────────────── SCORE & DISPLAY ───────────────────────
+# Combine scores and display
 df = meta_df.merge(walk_df[["id", "walk_prob"]], how="inner")
 df = df[df.year < stem_year].copy()
 
@@ -198,16 +204,12 @@ df["score"] = alpha * df.walk_prob + (1 - alpha) * sim
 st.subheader(f"🔎 Recommended Samples Based on: **{stem_row.title}**")
 st.dataframe(
     df.sort_values("score", ascending=False)
-      .head(100)[["title", "artist", "year", "score"]]
-      .style.format({"score": "{:.3f}"})
+    .head(100)[["title", "artist", "year", "score"]]
+    .style.format({"score": "{:.3f}"})
 )
 
-import networkx as nx
-import matplotlib.pyplot as plt
-
-# ─────────────────────── SAMPLING GRAPH ───────────────────────
+# Graph visualization
 with st.expander("🔗 Show sampling graph (outgoing edges only)"):
-
     @st.cache_data(show_spinner="Loading sampling tree...")
     def fetch_sampling_tree_full(stem_id):
         query = """
@@ -226,6 +228,7 @@ with st.expander("🔗 Show sampling graph (outgoing edges only)"):
           collect(DISTINCT tgt_artist.name) AS tgt_artists
         """
         return conn.query(query, {"id": stem_id})
+
 
     tree_data = fetch_sampling_tree_full(stem_id)
 
@@ -266,21 +269,8 @@ with st.expander("🔗 Show sampling graph (outgoing edges only)"):
             # Always add the edge if src or tgt is in valid_ids
             G.add_edge(id_to_label[record["src_id"]], id_to_label[record["tgt_id"]])
 
-
-        # 👉 Kamada-Kawai layout for connected graphs
-        pos = nx.kamada_kawai_layout(G)
-
-        node_colors = [G.nodes[n].get("color", "gray") for n in G.nodes]
-
         nt = Network(height="690px", width="100%", directed=True)
         nt.from_nx(G)
         nt.set_options("""var options={ "physics":{ "solver":"forceAtlas2Based" } }""")
         html = nt.generate_html()
         components.html(html, height=700)
-
-
-
-
-
-
-

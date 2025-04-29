@@ -3,12 +3,16 @@ import pandas as pd
 from neo4j_utils import Neo4jConnection
 import urllib.parse
 
-# ─────────────────────── PAGE SETUP ───────────────────────
 st.set_page_config(page_title="PageRank Leaderboard", page_icon="🏆", layout="wide")
 st.title("🏆 Top 50 Most Influential Songs in This Network")
 
-# ─────────────────────── NEO4J QUERY ───────────────────────
-conn = Neo4jConnection("bolt://localhost:7687", "neo4j", "testpassword")
+
+@st.cache_resource
+def get_conn():
+    return Neo4jConnection("bolt://localhost:7687", "neo4j", "testpassword")
+
+
+conn = get_conn()
 
 query = """
 MATCH (s:Song)
